@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    restart: always
+
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    restart: always

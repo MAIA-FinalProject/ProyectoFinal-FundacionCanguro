@@ -1,0 +1,30 @@
+[project]
+name = "proyecto-canguro"
+version = "0.1.0"
+description = "Proyecto de grado Fundación Canguro"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "streamlit",
+    "pandas",
+    "scikit-learn",
+    "pydantic-settings",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pre-commit",
+    "dvc",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.mypy]
+ignore_missing_imports = true
