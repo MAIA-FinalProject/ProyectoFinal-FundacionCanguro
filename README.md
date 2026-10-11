@@ -20,6 +20,8 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 │   ├── interim/          # Cohortes intermedias generadas por src/data (Canguro, TC, Referencia)
 │   ├── processed/        # Datos limpios y transformados
 │   └── features/         # Features calculadas para entrenamiento e inferencia
+├── docs/                 # Documentación del proyecto
+│   └── decisiones.md     # Registro de decisiones técnicas y metodológicas (qué y por qué)
 ├── deploy/               # Archivos de despliegue e infraestructura (Docker Compose)
 │   └── docker-compose.yml
 ├── notebooks/            # Notebooks de Jupyter para exploración y experimentación
@@ -119,6 +121,35 @@ data/raw/
   - Windows: `%LOCALAPPDATA%\pydrive2fs\Cache\`
   - Linux: `~/.cache/pydrive2fs/` · macOS: `~/Library/Caches/pydrive2fs/`
 - *`403` / acceso denegado*: verifica que tu cuenta tenga permiso de Editor sobre la carpeta `dvc` y figure como *test user*.
+
+---
+
+## Pipeline de Datos
+
+> El **porqué** de cada decisión de datos (definición de cohortes, curvas de RCIU, privacidad, etc.) está en [`docs/decisiones.md`](docs/decisiones.md).
+
+### Ingesta de cohortes (`src/data/load_data.py`)
+
+Lee el Excel maestro y lo separa en las cohortes poblacionales según la variable de asignación `ubicac`, conservando todas las columnas originales (la limpieza ocurre en etapas posteriores).
+
+```bash
+uv run python -m src.data.load_data                 # exporta en parquet (por defecto)
+uv run python -m src.data.load_data --format csv    # alternativa en CSV
+```
+
+| | |
+|---|---|
+| **Entrada** | `data/raw/kmc400_datos_completos.xlsx` (491 × 2267, obtenido con `dvc pull`) |
+| **Salida** | `data/interim/<cohorte>.parquet` (ignorado por Git) |
+
+| Cohorte | Criterio | n |
+|---|---|---|
+| `canguro` | `ubicac == 1` — brazo Método Madre Canguro del ECA | 228 |
+| `tradicional` | `ubicac == 2` — brazo cuidado tradicional (incubadora) del ECA | 213 |
+| `referencia` | `ubicac == 3` — nacidos a término > 2500 g, fuera del ECA. Incluye la columna `rciu_fenton_ref` | 50 |
+| `referencia_rciu_fenton` | Subgrupo de `referencia` con `BIRTH_RCIUFenton == 1` | 12 |
+
+El script **falla sin exportar nada** si el archivo no existe, si `code` tiene duplicados, si `ubicac` tiene valores fuera de {1, 2, 3} o si algún tamaño no coincide con la tabla anterior.
 
 ---
 
