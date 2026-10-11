@@ -1,0 +1,5 @@
+outs:
+- md5: 2c7559e20b503621ee58edb9d1083963
+  size: 5795469
+  hash: md5
+  path: kmc400_datos_completos.xlsx
