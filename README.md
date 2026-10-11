@@ -13,8 +13,11 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 │       └── ci.yml        # Pipeline de Integración Continua (Ruff + Pytest con uv)
 ├── api/                  # Microservicio de API REST (FastAPI / Uvicorn)
 ├── dashboard/            # Microservicio de interfaz de usuario (Streamlit)
+├── .dvc/                 # Configuración de DVC (remoto en Google Drive)
 ├── data/                 # Gestión de datos (excluida del control de versiones por Git, gestionada con DVC)
-│   ├── raw/              # Datos crudos / inmutables
+│   ├── raw/              # Datos crudos / inmutables (versionados con archivos *.dvc)
+│   │   └── docs/         # Documentación entregada por la Fundación (codebook, guías)
+│   ├── interim/          # Cohortes intermedias generadas por src/data (Canguro, TC, Referencia)
 │   ├── processed/        # Datos limpios y transformados
 │   └── features/         # Features calculadas para entrenamiento e inferencia
 ├── deploy/               # Archivos de despliegue e infraestructura (Docker Compose)
@@ -38,7 +41,7 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 - **API REST:** FastAPI + Uvicorn.
 - **Dashboard:** Streamlit.
 - **Machine Learning & Data Processing:** Scikit-learn, Pandas.
-- **Data Version Control:** DVC.
+- **Data Version Control:** DVC con remoto en Google Drive (`dvc[gdrive]`).
 - **Calidad de Código y Tipado:** Ruff (Linter & Formatter), Mypy.
 - **Pruebas:** Pytest.
 - **Contenedores y Despliegue:** Docker & Docker Compose.
@@ -50,7 +53,7 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 
 ### Requisitos Previos
 
-- Python `>= 3.10`
+- Python `>= 3.10` (el proyecto fija `3.12` en `.python-version`; `uv` lo instala si hace falta)
 - `uv` instalado. Si no lo tienes instalado, ejecútalo mediante:
   ```bash
   pip install uv
@@ -77,6 +80,46 @@ Para asegurar que todo el código cumpla los estándares de calidad antes de rea
 uv run pre-commit install
 ```
 
+### 3. Configurar DVC y descargar los datos
+
+Los datos clínicos son **confidenciales** (acuerdo con la Fundación Canguro) y nunca se suben a GitHub. Git solo versiona los archivos `*.dvc` (hashes); el contenido real vive en una carpeta privada de Google Drive a la que DVC accede mediante un cliente OAuth propio del proyecto.
+
+**Requisitos (una sola vez por persona):**
+- Tener acceso de **Editor** a la carpeta `dvc` del Drive del proyecto.
+- Que tu Gmail esté registrado como *test user* en la pantalla de consentimiento OAuth del proyecto de Google Cloud (solicitarlo al administrador).
+- Obtener el `CLIENT_ID` y `CLIENT_SECRET` del cliente OAuth por el canal privado del equipo.
+
+> **Nunca** escribas el client ID/secret en este README, en `.dvc/config` ni en ningún archivo versionado. El flag `--local` los guarda en `.dvc/config.local`, que DVC excluye de Git automáticamente.
+
+```bash
+# Configurar credenciales (solo en tu máquina)
+uv run dvc remote modify --local gdrive gdrive_client_id "<CLIENT_ID>"
+uv run dvc remote modify --local gdrive gdrive_client_secret "<CLIENT_SECRET>"
+
+# Descargar los datos a data/raw/
+uv run dvc pull
+```
+
+La primera vez se abrirá el navegador para autenticarte con Google. Si aparece la advertencia *"Google no ha verificado esta app"*, continúa con **Avanzado → Ir a (nombre de la app)**.
+
+Tras el `pull` deberías tener:
+
+```text
+data/raw/
+├── kmc400_datos_completos.xlsx
+├── kmc400_diccionario_draft_202504.xlsx
+└── docs/
+    ├── kmc400_codebook_spss.pdf
+    ├── kmc400_grupos_interes_2026.docx
+    └── kmc400_presentacion_datos_2025.docx
+```
+
+**Problemas frecuentes:**
+- *Error de autenticación o token expirado* (mientras la app OAuth esté en modo *Testing*, los tokens vencen cada 7 días): borra las credenciales en caché y vuelve a ejecutar `uv run dvc pull`.
+  - Windows: `%LOCALAPPDATA%\pydrive2fs\Cache\`
+  - Linux: `~/.cache/pydrive2fs/` · macOS: `~/Library/Caches/pydrive2fs/`
+- *`403` / acceso denegado*: verifica que tu cuenta tenga permiso de Editor sobre la carpeta `dvc` y figure como *test user*.
+
 ---
 
 ## Comandos de Desarrollo
@@ -101,6 +144,17 @@ uv run mypy src/ api/
 ### Ejecutar Pruebas (`pytest`)
 ```bash
 uv run pytest
+```
+
+### Versionado de Datos (`dvc`)
+```bash
+# Ver si los datos locales están sincronizados con el remoto
+uv run dvc status -c
+
+# Agregar o actualizar un archivo de datos (genera/actualiza su .dvc)
+uv run dvc add data/raw/<archivo>
+uv run dvc push            # sube el contenido a Google Drive
+git add data/raw/<archivo>.dvc   # versiona solo el puntero en Git
 ```
 
 ---

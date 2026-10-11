@@ -11,6 +11,8 @@ dependencies = [
     "pandas",
     "scikit-learn",
     "pydantic-settings",
+    "openpyxl>=3.1.5",
+    "pyarrow>=25.0.1",
 ]
 
 [dependency-groups]
@@ -19,8 +21,13 @@ dev = [
     "mypy",
     "pytest",
     "pre-commit",
-    "dvc",
+    "dvc[gdrive]>=3.67.1",
 ]
+
+[tool.uv]
+# pydrive2 (dvc[gdrive]) exige pyOpenSSL<=24.2.1; sin esta restricción uv elige
+# pyOpenSSL 22.0.0, incompatible con cryptography reciente ("no attribute GEN_EMAIL").
+constraint-dependencies = ["pyopenssl>=24.2.1"]
 
 [tool.ruff]
 line-length = 88

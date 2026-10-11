@@ -84,3 +84,9 @@ data/**
 !data/**/
 !data/**/*.dvc
 !data/**/.gitkeep
+data/raw/*.xlsx
+data/raw/docs/
+data/interim/*.parquet
+data/interim/*.csv
+data/processed/*.parquet
+
