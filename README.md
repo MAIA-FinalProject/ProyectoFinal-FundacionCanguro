@@ -195,11 +195,20 @@ git add data/raw/<archivo>.dvc   # versiona solo el puntero en Git
 Para levantar los microservicios (`api` y `dashboard`) localmente con Docker Compose:
 
 ```bash
-docker-compose -f deploy/docker-compose.yml up --build
+docker compose -f deploy/docker-compose.yml up --build
 ```
 
 - **API REST (FastAPI):** `http://localhost:8000`
 - **Dashboard (Streamlit):** `http://localhost:8501`
+- **Health check:** `http://localhost:8000/health`
+
+Compose construye ambos servicios desde la raíz del repositorio y los conecta a
+una red interna. El dashboard consulta la API mediante `API_BASE_URL` (en Compose,
+`http://api:8000`). Los puertos del host se enlazan a `127.0.0.1`; para acceder a
+un despliegue en EC2 se debe usar un túnel SSH o configurar un proxy HTTPS con
+controles de acceso. El `.dockerignore` excluye `data/` y `.dvc/` del contexto de
+construcción para que datos clínicos y credenciales locales no entren en las
+imágenes.
 
 ---
 
