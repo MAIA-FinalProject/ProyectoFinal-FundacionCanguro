@@ -90,3 +90,6 @@ data/interim/*.parquet
 data/interim/*.csv
 data/processed/*.parquet
 
+# Temporary local copy of thesis/source material; never commit to Git.
+data/raw/Tesis/
+

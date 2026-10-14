@@ -13,6 +13,7 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 │       └── ci.yml        # Pipeline de Integración Continua (Ruff + Pytest con uv)
 ├── api/                  # Microservicio de API REST (FastAPI / Uvicorn)
 ├── dashboard/            # Microservicio de interfaz de usuario (Streamlit)
+├── contracts/            # Esquemas compartidos para payloads de los servicios
 ├── .dvc/                 # Configuración de DVC (remoto en Google Drive)
 ├── data/                 # Gestión de datos (excluida del control de versiones por Git, gestionada con DVC)
 │   ├── raw/              # Datos crudos / inmutables (versionados con archivos *.dvc)
@@ -21,6 +22,7 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 │   ├── processed/        # Datos limpios y transformados
 │   └── features/         # Features calculadas para entrenamiento e inferencia
 ├── docs/                 # Documentación del proyecto
+│   ├── inputs-paciente.md # Formulario, payload y guía para mantener sus campos
 │   └── decisiones.md     # Registro de decisiones técnicas y metodológicas (qué y por qué)
 ├── deploy/               # Archivos de despliegue e infraestructura (Docker Compose)
 │   └── docker-compose.yml
@@ -201,6 +203,9 @@ docker compose -f deploy/docker-compose.yml up --build
 - **API REST (FastAPI):** `http://localhost:8000`
 - **Dashboard (Streamlit):** `http://localhost:8501`
 - **Health check:** `http://localhost:8000/health`
+
+La guía del formulario, su payload y el procedimiento para agregar o quitar
+campos está en [`docs/inputs-paciente.md`](docs/inputs-paciente.md).
 
 Compose construye ambos servicios desde la raíz del repositorio y los conecta a
 una red interna. El dashboard consulta la API mediante `API_BASE_URL` (en Compose,
