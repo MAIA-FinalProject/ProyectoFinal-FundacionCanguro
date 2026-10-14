@@ -13,8 +13,10 @@ COPY README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY api ./api
+COPY contracts ./contracts
 
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONPATH="/app"
 
 USER app
 
