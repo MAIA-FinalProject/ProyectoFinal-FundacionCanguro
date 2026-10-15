@@ -153,6 +153,23 @@ uv run python -m src.data.load_data --format csv    # alternativa en CSV
 
 El script **falla sin exportar nada** si el archivo no existe, si `code` tiene duplicados, si `ubicac` tiene valores fuera de {1, 2, 3} o si algún tamaño no coincide con la tabla anterior.
 
+
+### Pipeline de extremo a extremo (`src/pipeline.py`)
+
+Un solo comando ejecuta en orden la ingesta (`load_data.py`) y los módulos de features (`build_hw.py`, `build_target.py`). Los pasos cuyo script todavía no existe se reportan como `PENDIENTE` y se omiten sin romper el flujo; con `--strict` fallan. El pipeline crea `data/interim`, `data/processed` y `data/features` si no existen, y se detiene en el primer paso que falle.
+
+```bash
+uv run python -m src.pipeline                 # pipeline completo
+uv run python -m src.pipeline --list          # pasos y su estado
+uv run python -m src.pipeline --dry-run       # muestra qué correría, sin ejecutar
+uv run python -m src.pipeline --only ingesta  # un solo paso
+uv run python -m src.pipeline --strict        # los pasos pendientes cuentan como error
+```
+
+En Linux (servidor, Docker) hay atajos con `make`: `make build-features`, `make list-steps`, `make dry-run`, `make ingest`, `make test`, `make lint` y `make help`. En Windows, `make` normalmente no viene instalado: usa los comandos `uv run` de arriba.
+
+Si falta `data/raw/kmc400_datos_completos.xlsx`, el pipeline lo avisa: corre antes `uv run dvc pull`.
+
 ---
 
 ## Comandos de Desarrollo
