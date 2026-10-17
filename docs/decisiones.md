@@ -44,6 +44,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-010](#dec-010--atípicos-y-centinelas-no-se-eliminan-por-regla-automática) | Atípicos y centinelas: no se eliminan por regla automática | Datos | Propuesta |
 | [DEC-011](#dec-011--definición-de-sw_motor-y-etiqueta-de-resiliencia) | Definición de `SW_motor` y etiqueta de resiliencia | Metodología | Propuesta |
 | [DEC-012](#dec-012--alcance-del-imputador-mice-solo-variables-clínicas-del-formulario) | Alcance del imputador MICE: solo variables clínicas del formulario | Metodología | Propuesta |
+| [DEC-013](#dec-013--orquestación-del-pipeline-módulo-de-python-con-makefile-como-atajo) | Orquestación del pipeline: módulo de Python con `Makefile` como atajo | Infraestructura | Aceptada |
 
 ---
 
@@ -238,3 +239,21 @@ Como Fenton se publicó en 2013, la clasificación es necesariamente retrospecti
 **Alternativas descartadas.** Imputar todo el dataset una sola vez: inestable y con fuga entre entrenamiento y prueba.
 
 **Consecuencias.** El 3.1 debería exponer una función `build_imputer()` que devuelva el imputador sin ajustar, para que el 3.2 lo incluya en su pipeline de validación cruzada, y exportar el imputador ajustado a `modelos/` para la API (3.3).
+
+---
+
+## DEC-013 — Orquestación del pipeline: módulo de Python con Makefile como atajo
+
+- **Fecha:** 2026-10-15 · **Autor:** María Paula Saa · **Estado:** Aceptada
+- **Contexto / issue:** rama `2.3-arch-orquestacion-del-pipeline-de-datos-make-uv` (issue #8)
+
+**Decisión.** El pipeline de datos se orquesta con un módulo de Python (`src/pipeline.py`) que se ejecuta con `uv run python -m src.pipeline`. El `Makefile` solo ofrece atajos para Linux (`make build-features`, `make list-steps`, etc.). Cada paso corre como `python -m <módulo>` desde la raíz del repo. Los pasos cuyo script todavía no existe se reportan como `PENDIENTE` y no rompen el flujo; con `--strict` fallan.
+
+**Motivo.** El equipo trabaja en Windows, donde `make` normalmente no está instalado, y el despliegue (3.4) es en Linux/Docker: un módulo de Python funciona igual en ambos y se prueba con `pytest` (`tests/test_pipeline.py`). Los scripts de features (2.1 y 2.2) los entregan otros tickets, así que el orquestador debe tolerar pasos ausentes y avisarlo con claridad. Cada paso verifica sus entradas (con un mensaje de ayuda si faltan los datos crudos, que se bajan con `dvc pull`) y sus salidas, y el flujo se detiene en el primer fallo. Crea `data/interim`, `data/processed` y `data/features` si no existen, de modo que corre desde cero.
+
+**Alternativas descartadas.**
+- *Solo `Makefile`*: no funciona en Windows sin instalar `make`.
+- *`uv run build` con `[project.scripts]`*: exige agregar un `[build-system]` a `pyproject.toml` y convertir el proyecto en un paquete instalable, lo que cambia cómo se instala todo el repositorio.
+- *Herramientas de orquestación (pipelines de DVC, Airflow, Prefect)*: excesivas para tres pasos; se puede revisar un `dvc.yaml` si más adelante se necesita cachear etapas.
+
+**Consecuencias.** Cuando el 2.1 y el 2.2 fijen sus archivos de salida, hay que completar `outputs` de `hardware_motor` y confirmar `data/features/target_resilience.parquet` en `STEPS`. Los pasos nuevos (imputación en el 3.1, entrenamiento en el 3.2) se registran en `STEPS`. En el despliegue conviene usar `--strict`, para que un paso faltante falle en vez de omitirse.
