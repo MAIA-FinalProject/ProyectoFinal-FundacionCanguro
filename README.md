@@ -154,6 +154,32 @@ uv run python -m src.data.load_data --format csv    # alternativa en CSV
 El script **falla sin exportar nada** si el archivo no existe, si `code` tiene duplicados, si `ubicac` tiene valores fuera de {1, 2, 3} o si algún tamaño no coincide con la tabla anterior.
 
 
+### Features de hardware motor (`src/features/build_hw.py`)
+
+Extrae de las cohortes de `data/interim/` las métricas de neuroimagen de las ROI motoras pre-especificadas, ajusta por volumen intracraneal (ICV) y construye el índice compuesto `hw_motor` (decisiones DEC-014 a DEC-019).
+
+```bash
+uv run python -m src.features.build_hw
+uv run python -m src.pipeline --only hardware_motor   # equivalente, desde el orquestador
+```
+
+| | |
+|---|---|
+| **Entrada** | `data/interim/{canguro,tradicional,referencia}.parquet` |
+| **Salida** | `data/features/hw_motor.parquet`: una fila por sujeto con RM (299) |
+
+| Grupo de columnas | Contenido |
+|---|---|
+| Identificación y calidad | `code`, `ubicac`, `lessthan1801g`, `fit_sample` (población DEC-007, n = 209), `icv`, `qc_dti_ok`, `qc_mprage_mov`, `qc_ok` |
+| `sub_*` | Volumen de caudado, putamen y pálido (izquierdo y derecho) |
+| `ba_*` | Brodmann BA4a, BA4p, BA3a, BA3b, BA1, BA2: volumen, área, grosor y curvatura |
+| `dk_*` | Desikan precentral y postcentral (solo sensibilidad, fuera del índice) |
+| `cst_*` | Tracto corticoespinal: FA, MD, RD, AD y volumen |
+| `*_icvadj` | Volumen y área ajustados por ICV, para contrastes entre prematuros (vacíos en la referencia) |
+| `hw_motor`, `hw_motor_classic`, `hw_motor_qc` | Índice compuesto: z robusto, z clásico y z robusto solo con buena calidad de imagen |
+
+Las métricas sin sufijo son **absolutas** y son las que se usan para el contraste término vs prematuros. Cerebelo, tálamo y el resto de la corteza quedan fuera por construcción (lista cerrada `FEATURE_MAP`).
+
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 
 Un solo comando ejecuta en orden la ingesta (`load_data.py`) y los módulos de features (`build_hw.py`, `build_target.py`). Los pasos cuyo script todavía no existe se reportan como `PENDIENTE` y se omiten sin romper el flujo; con `--strict` fallan. El pipeline crea `data/interim`, `data/processed` y `data/features` si no existen, y se detiene en el primer paso que falle.
