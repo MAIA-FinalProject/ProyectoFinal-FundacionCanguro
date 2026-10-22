@@ -1,6 +1,6 @@
-# Proyecto Canguro - Arquitectura MLOps & Microservicios
+# Proyecto Canguro - Fenotipado de Resiliencia Motora (MLOps & Microservicios)
 
-Este repositorio contiene la arquitectura base y la infraestructura para el **Proyecto Final Fundación Canguro**, estructurado bajo principios de MLOps y diseñado con una arquitectura basada en microservicios.
+Este repositorio contiene la arquitectura de software, infraestructura y canalizaciones de Machine Learning para el **Proyecto Final Fundación Canguro (Cohorte KMC-400 a 20 Años)**, desarrollado por el Grupo 7 de MAIA (Universidad de los Andes). El sistema está estructurado bajo principios de MLOps y diseñado con una arquitectura de microservicios desacoplada.
 
 ---
 
@@ -13,23 +13,26 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 │       └── ci.yml        # Pipeline de Integración Continua (Ruff + Pytest con uv)
 ├── api/                  # Microservicio de API REST (FastAPI / Uvicorn)
 ├── dashboard/            # Microservicio de interfaz de usuario (Streamlit)
-├── contracts/            # Esquemas compartidos para payloads de los servicios
-├── .dvc/                 # Configuración de DVC (remoto en Google Drive)
-├── data/                 # Gestión de datos (excluida del control de versiones por Git, gestionada con DVC)
+├── contracts/            # Esquemas compartidos y tipados para payloads (Pydantic)
+├── .dvc/                 # Configuración de DVC (remoto privado en Google Drive)
+├── data/                 # Gestión de datos (excluida de Git, versionada con DVC)
 │   ├── raw/              # Datos crudos / inmutables (versionados con archivos *.dvc)
 │   │   └── docs/         # Documentación entregada por la Fundación (codebook, guías)
 │   ├── interim/          # Cohortes intermedias generadas por src/data (Canguro, TC, Referencia)
 │   ├── processed/        # Datos limpios y transformados
-│   └── features/         # Features calculadas para entrenamiento e inferencia
-├── docs/                 # Documentación del proyecto
-│   ├── inputs-paciente.md # Formulario, payload y guía para mantener sus campos
-│   └── decisiones.md     # Registro de decisiones técnicas y metodológicas (qué y por qué)
+│   └── features/         # Features calculadas (hw_motor.parquet, target_resilience.parquet)
+├── docs/                 # Documentación del proyecto (Documentation as Code - DaC)
+│   ├── informe-avance.md # Informe consolidado de avance, literatura, metodología y resultados
+│   ├── inputs-paciente.md # Formulario, payload JSON y especificación de campos clínicos
+│   └── decisiones.md     # Registro de decisiones técnicas y metodológicas (DEC-001 a DEC-019)
 ├── deploy/               # Archivos de despliegue e infraestructura (Docker Compose)
 │   └── docker-compose.yml
-├── notebooks/            # Notebooks de Jupyter para exploración y experimentación
+├── notebooks/            # Notebooks de Jupyter para exploración, EDA y validación visual
+│   ├── 01_eda_fase_0.ipynb            # EDA de completitud, atípicos (3xIQR) y consistencia
+│   └── 02_resilience_phenotype.ipynb  # Validación visual del fenotipo de resiliencia (Ticket 2.2)
 ├── src/                  # Código fuente modular de la aplicación y canalizaciones de ML
 │   ├── data/             # Módulos para carga, limpieza e ingesta de datos
-│   ├── features/         # Módulos para ingeniería de características (feature engineering)
+│   ├── features/         # Módulos para ingeniería de características (build_hw, build_target)
 │   └── models/           # Módulos para entrenamiento, evaluación e inferencia de modelos
 ├── tests/                # Pruebas unitarias y de integración (Pytest)
 ├── .gitignore            # Exclusiones estándar y reglas para datos / DVC
@@ -179,6 +182,49 @@ uv run python -m src.pipeline --only hardware_motor   # equivalente, desde el or
 | `hw_motor`, `hw_motor_classic`, `hw_motor_qc` | Índice compuesto: z robusto, z clásico y z robusto solo con buena calidad de imagen |
 
 Las métricas sin sufijo son **absolutas** y son las que se usan para el contraste término vs prematuros. Cerebelo, tálamo y el resto de la corteza quedan fuera por construcción (lista cerrada `FEATURE_MAP`).
+
+
+### Target de resiliencia motora (`src/features/build_target.py`)
+
+Calcula el índice funcional de **Software Motor** (`SW_motor`) a partir de la prueba *Nine-Hole Peg Test* (NHPT), invirtiendo la escala temporal (mayor puntaje = mejor destreza). Ajusta un modelo lineal multivariado por Mínimos Cuadrados Ordinarios (OLS) sobre la población útil de prematuros con neuroimagen depurada por calidad (`hw_motor_qc`), sexo y fragilidad neonatal (decisiones DEC-007, DEC-011 y DEC-019):
+
+$$\text{SW\_motor} \sim \text{hw\_motor\_qc} + \text{BIRTH\_sexo5} + \text{FOLLOW\_Fragility\_Rasch\_441\_2PL}$$
+
+Extrae los residuales continuos (`resilience_score`) y establece el corte binario `is_resilient` (True si el residual $> 0$).
+
+```bash
+uv run python -m src.features.build_target
+uv run python -m src.pipeline --only target_resiliencia   # equivalente, desde el orquestador
+```
+
+| | |
+|---|---|
+| **Entrada** | `data/features/hw_motor.parquet` y `data/interim/{canguro,tradicional}.parquet` |
+| **Salida** | `data/features/target_resilience.parquet`: una fila por prematuro modelado ($N = 168$) |
+
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `code` | `int64` | Identificador único del participante |
+| `SW_motor` | `float64` | Desempeño motor estandarizado (promedio bilateral, Z-score robusto invertido) |
+| `resilience_score` | `float64` | Residual OLS ($\epsilon_i$, desempeño observado menos esperado por sustrato) |
+| `is_resilient` | `bool` | Etiqueta binaria de resiliencia motora ($100/168 = 59.5\%$ resilientes) |
+
+> **Hallazgo:** El modelo de sustrato explica un $R^2 = 0.0459$ ($4.6\%$). El residuo no explicado ($95.4\%$) captura la varianza de neuroplasticidad y compensación funcional.
+
+---
+
+## Documentación del Proyecto (Documentation as Code - DaC)
+
+Toda la documentación técnica, clínica y arquitectónica se gestiona como código versionado en la carpeta [`docs/`](docs/):
+
+1. **[`docs/informe-avance.md`](docs/informe-avance.md):**  
+   Informe consolidado de avance del proyecto (Equipo MAIA - Grupo 7). Comprende la revisión de la literatura médica, el marco conceptual de resiliencia motora, el dilema del ICV, los hallazgos del EDA (Fase 0), la derivación del target ($R^2 = 0.0459$), la evaluación de baselines supervisados y el análisis de sesgos estructurales (supervivencia diferencial y selección a imagen).
+2. **[`docs/decisiones.md`](docs/decisiones.md):**  
+   Registro de Decisiones de Arquitectura y Metodología (Architecture Decision Records - ADR, DEC-001 a DEC-019). Registra el *qué*, el *por qué* y las alternativas descartadas para cada decisión de datos, infraestructura y modelado.
+3. **[`docs/inputs-paciente.md`](docs/inputs-paciente.md):**  
+   Especificación del formulario clínico, contrato Pydantic (`contracts/patient.py`) y guía para agregar o modificar entradas del paciente para el microservicio de inferencia.
+
+---
 
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 
