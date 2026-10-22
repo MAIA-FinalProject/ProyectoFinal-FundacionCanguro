@@ -73,7 +73,6 @@ class StepResult:
     detail: str = ""
 
 
-# Completar `outputs` de hardware_motor cuando el ticket 2.1 fije sus nombres.
 STEPS: tuple[Step, ...] = (
     Step(
         name="ingesta",
@@ -94,6 +93,13 @@ STEPS: tuple[Step, ...] = (
         module="src.features.build_hw",
         script="src/features/build_hw.py",
         description="Features de hardware motor, ROIs e ICV (ticket 2.1)",
+        inputs=(
+            "data/interim/canguro.parquet",
+            "data/interim/tradicional.parquet",
+            "data/interim/referencia.parquet",
+        ),
+        outputs=("data/features/hw_motor.parquet",),
+        hint="Corre antes la ingesta: uv run python -m src.pipeline --only ingesta",
     ),
     Step(
         name="target_resiliencia",
