@@ -106,7 +106,13 @@ STEPS: tuple[Step, ...] = (
         module="src.features.build_target",
         script="src/features/build_target.py",
         description="SW_motor y target de resiliencia (ticket 2.2)",
+        inputs=(
+            "data/features/hw_motor.parquet",
+            "data/interim/canguro.parquet",
+            "data/interim/tradicional.parquet",
+        ),
         outputs=("data/features/target_resilience.parquet",),
+        hint="Corre antes: uv run python -m src.pipeline --only hardware_motor",
     ),
 )
 
