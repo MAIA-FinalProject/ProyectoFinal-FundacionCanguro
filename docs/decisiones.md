@@ -56,6 +56,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-022](#dec-022--neo-no-se-imputa-su-faltante-es-estructural) | NEO no se imputa: su faltante es estructural | Datos | Aceptada |
 | [DEC-023](#dec-023--dos-usos-separados-imputador-del-formulario-y-dataset-de-análisis-con-neo) | Dos usos separados: imputador del formulario y dataset de análisis con NEO | Metodología | Propuesta |
 | [DEC-024](#dec-024--configuración-del-imputador-mice) | Configuración del imputador MICE | Metodología | Aceptada |
+| [DEC-025](#dec-025--modelo-base-de-resiliencia-regresión-logística-regularizada-resultado-equivalente-al-azar) | Modelo base de resiliencia: regresión logística regularizada, resultado equivalente al azar | Metodología | Aceptada |
 
 ---
 
@@ -573,3 +574,22 @@ En `NEO_ECN` y `NEO_ventilacion`, el valor −1 **no es un código de faltante**
 - **La imputación única subestima la varianza:** el total HOME imputado tiene desviación estándar 0.9, frente a 4.7 en los observados, porque MICE con la media condicional asigna valores cercanos al promedio. Al 37.6% de los sujetos le falta todo el bloque HOME (solo se predice a partir de 5 variables completas: edad gestacional, peso, sexo y los dos índices de fragilidad), así que el 3.2 debe usar las marcas `home_*_imputado` o imputación múltiple antes de concluir sobre el HOME.
 - **El `.pkl` depende del código:** referencia funciones de `src.data.imputation`, así que la imagen de la API (3.3) debe incluir `src/` además de `contracts/`. El script se ejecuta desde el módulo importado para que el `.pkl` no quede ligado a `__main__` (una prueba lo verifica cargándolo desde otro proceso).
 - **mypy:** se agregó en `pyproject.toml` un override para no reportar los errores de tipos de `contracts/patient.py` (ticket 2.4) al seguir el import; `mypy contracts/` los sigue mostrando.
+
+---
+
+## DEC-025 — Modelo base de resiliencia: regresión logística regularizada, resultado equivalente al azar
+
+- **Fecha:** 2026-10-25 · **Autor:** María Paula Saa · **Estado:** Aceptada
+- **Contexto / issue:** rama `3.2-ml-engineer-entrenamiento-de-modelo-base` (issue #16)
+
+**Decisión.** El modelo base predice `is_resilient` (DEC-020) con las 19 variables del formulario del paciente (`contracts/patient.py`), tomadas sin imputar de las cohortes del ECA y unidas al target por `code` (n = 168, 53.6% resilientes). El modelo principal, fijado de antemano, es una regresión logística con regularización L2 elegida por validación cruzada interna (`LogisticRegressionCV`), con el imputador MICE del 3.1 dentro de cada fold. Se evalúa con validación cruzada estratificada de 5 folds repetida 10 veces (ROC-AUC, F1 y exactitud balanceada) frente a un modelo que predice la proporción de clases. Se exportan `modelos/baseline.pkl` (escalado + clasificador, sin imputador) y `modelos/baseline_meta.json` (variables en orden, métricas y versión de scikit-learn). La API (3.3) aplica `imputer_mice.pkl` y luego este modelo.
+
+**Motivo.** Resultados (media ± desviación entre folds): modelo principal, ROC-AUC 0.518 ± 0.067 y exactitud balanceada 0.500 ± 0.069; sin HOME, ROC-AUC 0.495 ± 0.081; Random Forest, 0.551 ± 0.068; corte en la mediana (clases 50/50), 0.541 ± 0.076. Con n = 168, el ROC-AUC de un modelo que adivina varía alrededor de ±0.045 (cálculo aproximado), así que ninguna variante se distingue del azar. El F1 no es informativo con 53.6% de positivos: el modelo que predice siempre "resiliente" obtiene 0.698. Una prueba de control (predecir si la edad gestacional supera la mediana) dio ROC-AUC 0.995, lo que descarta un error de alineación entre variables y etiquetas. Con las variables del primer año del formulario no se logra predecir la resiliencia motora en esta muestra. El n es 168 y no 209 porque el target exige `hw_motor_qc`, es decir, buena calidad de imagen (DEC-019).
+
+**Alternativas descartadas.**
+- *Elegir el Random Forest por tener el ROC-AUC más alto (0.551)*: la diferencia no se distingue del azar y sería escoger el modelo después de ver los resultados.
+- *Seguir ajustando variables o hiperparámetros hasta mejorar la cifra*: con 168 sujetos favorece el sobreajuste a la validación.
+- *Modelos más complejos (p. ej. boosting)*: con esta muestra aumentan el riesgo de sobreajuste.
+- *F1 como métrica principal*: engañosa con clases casi parejas.
+
+**Consecuencias.** El informe debe presentar este resultado como hallazgo negativo y limitación, no como un modelo con capacidad predictiva. La API (3.3) puede desplegar `baseline.pkl` como demostración técnica del flujo, pero sus predicciones no deben presentarse como útiles. Un modelo con más información (por ejemplo, variables posteriores al primer año) queda fuera de alcance, y la neuroimagen y el NHPT no pueden ser entradas porque el target sale de ellas. Si cambian el target (DEC-020), el n o las variables del formulario, se vuelve a correr `uv run python -m src.models.train_baseline`.
