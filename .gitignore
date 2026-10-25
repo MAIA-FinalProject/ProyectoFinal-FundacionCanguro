@@ -90,6 +90,10 @@ data/interim/*.parquet
 data/interim/*.csv
 data/processed/*.parquet
 
+# Modelos ajustados con datos confidenciales (imputador, clasificadores): DVC, no Git.
+modelos/*
+!modelos/.gitkeep
+!modelos/*.dvc
+
 # Temporary local copy of thesis/source material; never commit to Git.
 data/raw/Tesis/
-

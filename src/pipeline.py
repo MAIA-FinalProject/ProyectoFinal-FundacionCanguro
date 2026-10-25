@@ -5,6 +5,7 @@ Ejecuta de extremo a extremo y en orden los módulos del pipeline:
 1. ``ingesta``            -> ``src.data.load_data``        (ticket 1.2)
 2. ``hardware_motor``     -> ``src.features.build_hw``     (ticket 2.1)
 3. ``target_resiliencia`` -> ``src.features.build_target`` (ticket 2.2)
+4. ``imputacion``         -> ``src.data.imputation``       (ticket 3.1)
 
 Cada paso se ejecuta como ``python -m <módulo>`` desde la raíz del repo, así que
 las rutas no dependen del directorio desde el que se lance el comando.
@@ -113,6 +114,21 @@ STEPS: tuple[Step, ...] = (
         ),
         outputs=("data/features/target_resilience.parquet",),
         hint="Corre antes: uv run python -m src.pipeline --only hardware_motor",
+    ),
+    Step(
+        name="imputacion",
+        module="src.data.imputation",
+        script="src/data/imputation.py",
+        description="MICE del formulario -> data/processed/ y modelos/ (ticket 3.1)",
+        inputs=(
+            "data/interim/canguro.parquet",
+            "data/interim/tradicional.parquet",
+        ),
+        outputs=(
+            "data/processed/clinical_imputed.parquet",
+            "modelos/imputer_mice.pkl",
+        ),
+        hint="Corre antes la ingesta: uv run python -m src.pipeline --only ingesta",
     ),
 )
 

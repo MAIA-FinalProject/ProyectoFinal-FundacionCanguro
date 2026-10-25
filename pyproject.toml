@@ -40,3 +40,10 @@ target-version = "py310"
 
 [tool.mypy]
 ignore_missing_imports = true
+
+# src/data/imputation.py importa contracts/patient.py, que tiene errores de tipos
+# propios del ticket 2.4. No se reportan al seguir el import; `mypy contracts/`
+# los sigue mostrando.
+[[tool.mypy.overrides]]
+module = ["contracts", "contracts.*"]
+follow_imports = "silent"

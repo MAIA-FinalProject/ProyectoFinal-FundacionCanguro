@@ -35,7 +35,7 @@ WRITE_OUT = "from pathlib import Path\nPath('out.txt').write_text('ok')\n"
 def test_default_steps_are_well_formed():
     names = [s.name for s in pipeline.STEPS]
     assert len(names) == len(set(names))
-    assert names == ["ingesta", "hardware_motor", "target_resiliencia"]
+    assert names == ["ingesta", "hardware_motor", "target_resiliencia", "imputacion"]
     # El paso de ingesta ya existe en el repo (ticket 1.2)
     ingesta = pipeline.STEPS[0]
     assert pipeline.is_available(ingesta)

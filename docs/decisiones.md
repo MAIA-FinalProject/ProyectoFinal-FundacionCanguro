@@ -52,6 +52,10 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-018](#dec-018--estandarización-del-índice-robusta-como-principal-clásica-como-sensibilidad) | Estandarización del índice: robusta como principal, clásica como sensibilidad | Metodología | Propuesta |
 | [DEC-019](#dec-019--calidad-de-imagen-se-marca-y-se-ofrece-un-índice-filtrado) | Calidad de imagen: se marca y se ofrece un índice filtrado | Datos | Propuesta |
 | [DEC-020](#dec-020--target-de-resiliencia-motora-huberregressor-univariado-como-principal-ols-y-ajuste-clínico-como-sensibilidad) | Target de resiliencia motora: HuberRegressor univariado como principal, OLS y ajuste clínico como sensibilidad | Metodología | Aceptada |
+| [DEC-021](#dec-021--home-la-base-codifica-los-ítems-como-1-se-convierte-a-la-escala-estándar-0n) | HOME: la base codifica los ítems como ±1; se convierte a la escala estándar 0–N | Datos | Propuesta |
+| [DEC-022](#dec-022--neo-no-se-imputa-su-faltante-es-estructural) | NEO no se imputa: su faltante es estructural | Datos | Aceptada |
+| [DEC-023](#dec-023--dos-usos-separados-imputador-del-formulario-y-dataset-de-análisis-con-neo) | Dos usos separados: imputador del formulario y dataset de análisis con NEO | Metodología | Propuesta |
+| [DEC-024](#dec-024--configuración-del-imputador-mice) | Configuración del imputador MICE | Metodología | Aceptada |
 
 ---
 
@@ -411,7 +415,7 @@ Quedan fuera del índice, pero se exportan: área ajustada, grosor, curvatura, A
 - **Fecha:** 2026-10-24 · **Autor:** Martín Quintero / María Paula Saa · **Estado:** Aceptada
 - **Contexto / issue:** revisión de PR #25 (ticket 2.2); conecta con DEC-007, DEC-010, DEC-011, DEC-018 y DEC-019
 
-**Decisión.** 
+**Decisión.**
 1. El target principal de resiliencia motora se define como el residual de una regresión univariada robusta de Huber: `SW_motor ~ hw_motor_qc` (`HuberRegressor`).
 2. Las covariables perinatales (`BIRTH_sexo5` y `FOLLOW_Fragility_Rasch_441_2PL`) se excluyen de la regresión que define el target y se reservan como predictores o covariables en los modelos supervisados de la Fase 3 (Tickets 3.1 y 3.2).
 3. La etiqueta binaria principal `is_resilient` utiliza el corte conceptual en cero (`resilience_score > 0`, "rendimiento motor superior al esperado por el hardware cerebral", 53.6% en datos reales). Como análisis complementario, se exporta `is_resilient_median` con corte en la mediana de los residuales (garantizando un balance 50/50 exacto).
@@ -428,3 +432,144 @@ Quedan fuera del índice, pero se exportan: área ajustada, grosor, curvatura, A
 
 **Consecuencias.** En los datos reales, las etiquetas de la versión univariada y la ajustada coinciden en un 93.5% (con OLS) y 98.8% (con Huber), lo que demuestra alta estabilidad. Conceptualmente el target ahora permite explorar qué variables clínicas tempranas explican la resiliencia en el Sprint 3.
 
+---
+
+## DEC-021 — HOME: la base codifica los ítems como ±1; se convierte a la escala estándar 0–N
+
+- **Fecha:** 2026-10-25 · **Autor:** Martín Quintero · **Estado:** Propuesta (**confirmar la codificación con la Fundación**)
+- **Contexto / issue:** rama `15-31-de-ml-pipeline-mice` (ticket 3.1)
+
+**Decisión.** Las 6 subescalas crudas del HOME a los 12 meses se convierten a la escala estándar del HOME Infant/Toddler (Caldwell y Bradley, 1984), en la que cada ítem vale 1 si está presente y 0 si está ausente. La conversión es:
+
+```
+ítems presentes = (puntaje en la base + N) / 2        con N = número de ítems de la subescala
+```
+
+El total estándar (0–45) se recalcula como la suma de las subescalas convertidas. Las columnas convertidas llevan el sufijo `_std`. Los 6 puntajes factoriales (`HOMET_tsubs*fact`) **no** se convierten.
+
+**Motivo.** La base contiene puntajes "crudos" negativos (mínimo −19 en el total), algo imposible si cada ítem vale 1 o 0. El codebook no define códigos de faltante para estas variables, y los negativos aparecen dentro de los percentiles normales (por ejemplo, el P25 de *Learning material* es −1). La hipótesis es que **cada ítem se codificó como +1 (presente) o −1 (ausente)**, de modo que `puntaje = presentes − ausentes = 2 · presentes − N`. La evidencia en los 441 sujetos del ECA (275 con HOME):
+
+| Subescala | N ítems (Caldwell y Bradley) | Valores observados | Paridad esperada por ±1 | Rango tras convertir |
+|---|---|---|---|---|
+| Responsivity | 11 | −7 a 11 | impar | 2–11 |
+| Acceptance | 8 | 0 a 8 | par | 4–8 |
+| Organization | 6 | −6 a 6 | par | 0–6 |
+| Learning material | 9 | −9 a 9 | impar | 0–9 |
+| Involvement | 6 | −6 a 6 | par | 0–6 |
+| Variety | 5 | −5 a 5 | impar | 0–5 |
+| **Total** | **45** | −19 a 41 | impar | 13–43 |
+
+Tres hechos sostienen la hipótesis:
+1. **Paridad:** todos los valores tienen la paridad que predice `2k − N` en las 6 subescalas y el total.
+2. **Rango:** los extremos nunca superan ±N y son simétricos.
+3. **Suma exacta:** el total coincide con la suma de las subescalas en el 100% de los sujetos.
+
+Bajo esta lectura, el −9 de *Learning material* **no es un código de faltante**, sino "0 de 9 ítems presentes". 158 de los 275 sujetos con HOME tienen al menos un valor negativo.
+
+**Alternativas descartadas.**
+- *Tratar los negativos como faltantes*: borraría datos reales de 158 sujetos.
+- *Usar la escala de la base sin convertir*: es equivalente para MICE (la transformación es lineal), pero no es comparable con la literatura ni con los cortes normativos del total (0–25 bajo, 26–36 medio, 37–45 alto), y no permite acotar las imputaciones al rango válido.
+
+**Consecuencias.**
+- `home_to_standard()` **falla** si algún valor no es compatible con la codificación ±1 (resultado no entero o fuera de 0–N), y `check_home_total()` falla si el total deja de ser la suma de las subescalas. Si la Fundación entrega otra versión de la base, el error avisa en lugar de convertir mal en silencio.
+- El formulario (2.4) recibe el HOME en la codificación de la base y el `Pipeline` del imputador hace la conversión, así que la API usa exactamente la misma transformación.
+- **Limitación:** aunque la variable se llama "12 meses", la edad corregida de la visita va de 4.5 a 26 meses (73 sujetos con menos de 10 y 130 con más de 15). Se conserva `HOMET_tedadcorrvisitar12m` como variable.
+- **Pregunta para la Fundación:** ¿los ítems del HOME se codificaron como +1/−1? ¿Qué versión del HOME se aplicó (Infant/Toddler de 45 ítems)? Si la respuesta es distinta, basta con cambiar `HOME_SUBSCALE_ITEMS` y `home_to_standard()`.
+
+---
+
+## DEC-022 — NEO no se imputa: su faltante es estructural
+
+- **Fecha:** 2026-10-25 · **Autor:** Martín Quintero · **Estado:** Aceptada
+- **Contexto / issue:** rama `15-31-de-ml-pipeline-mice` (ticket 3.1); corrige el punto de DEC-009 sobre imputar NEO
+
+**Decisión.** El bloque NEO (hospitalización neonatal) no pasa por MICE. Se usan las versiones completas que ya entrega la Fundación, se excluyen las columnas incompletas que tienen un equivalente completo, y las dos columnas sin equivalente conservan su faltante, sin llenarlo.
+
+**Motivo.** En los 441 sujetos del ECA, 19 de las 25 columnas NEO están completas. Las otras 6 tienen un faltante que **no es aleatorio sino estructural**:
+
+| Columna incompleta | Faltante | Falta exactamente cuando | Equivalente completo | Tratamiento |
+|---|---|---|---|---|
+| `NEO_sepsis_neonatal` | 39% | no hospitalizado (172/172) | `NEO_sepsis_neonatal02` (coincide 100%, 0 en no hospitalizados) | Se excluye |
+| `NEO_ventilacion_neonatal` | 39% | no hospitalizado | `NEO_ventilation_neonatalallsample` (coincide 100%) | Se excluye |
+| `NEO_recibioaminiglucosidos` | 39% | no hospitalizado | `NEO_diasaminoglucosidos > 0` (coincide 100%) | Se excluye |
+| `NEO_totdiasmecvent` | 85% | no ventilado (375/375) | `NEO_diasventiladores` (coincide 100%) | Se excluye |
+| `NEO_totoxidias` | 39% | no hospitalizado | — | Se conserva con su faltante |
+| `NEO_infeccionoso` | 39% | no hospitalizado (más 1 hospitalizado) | — | Se conserva con su faltante |
+
+Imputar con MICE estas columnas sería **inventar sucesos que no existieron**: estimaría, por ejemplo, la probabilidad de sepsis intrahospitalaria de un bebé que nunca estuvo hospitalizado. Tampoco se llena con 0 `NEO_totoxidias`: un bebé canguro ambulatorio pudo recibir oxígeno en casa, así que asumir 0 días sería un supuesto sin respaldo.
+
+**La Fundación ya había resuelto el faltante estructural.** No fue necesario llenar nada por lógica: en 4 de las 6 columnas, la base actual ya trae una versión completa preparada por la Fundación, que asigna 0 ("no ocurrió") a los no hospitalizados o no ventilados y coincide al 100% con la columna original donde esta tiene dato. La evidencia de que esas versiones son posteriores al codebook (febrero de 2024) es que no aparecen en él, o aparecen con otra cobertura:
+
+| Variable en la base actual | En el codebook (feb-2024) | En la base actual (491 sujetos) |
+|---|---|---|
+| `NEO_sepsis_neonatal02` | No existe | Completa (491), 119 con sepsis |
+| `NEO_ventilation_neonatalallsample` | No existe | Completa en el ECA (441) |
+| `NEO_diasventiladores` | No existe | Completa (491) |
+| `NEO_diasaminoglucosidos` | 147 válidos, 344 faltantes (solo quienes recibieron el fármaco) | Completa en el ECA (441), con 0 para quienes no lo recibieron |
+
+Este registro solo usa esas versiones: no crea ni modifica valores. Las 2 columnas que la Fundación no completó (`NEO_totoxidias` y `NEO_infeccionoso`) se dejan con su faltante.
+
+**Diferencia a confirmar con la Fundación:** `NEO_sepsis_neonatal` tiene los mismos 269 sujetos válidos en el codebook y en la base, pero **71 casos de sepsis en el codebook frente a 119 en la base actual**. `NEO_sepsis_neonatal02` reproduce los 119. Todo indica que la definición o el registro de sepsis se actualizó después de febrero de 2024. Conviene confirmar cuál es la definición vigente, porque la sepsis fue el predictor número 1 del Grupo 27.
+
+En `NEO_ECN` y `NEO_ventilacion`, el valor −1 **no es un código de faltante**: según el codebook significa "no hospitalizado" (categoría de 3 niveles). Sus versiones binarias son `NEO_ECN02` y `NEO_ventilation_neonatalallsample`.
+
+**Alternativas descartadas.**
+- *MICE sobre NEO* (lo que proponía DEC-009 para las 6 columnas con > 30% de faltantes): inventa datos donde el valor real es "no aplica".
+- *Llenar con 0 por lógica las 6 columnas*: innecesario en 4 (ya existe la versión de la Fundación) y sin respaldo en las otras 2.
+
+**Consecuencias.** El dataset de análisis tiene 21 columnas NEO, de las cuales solo `NEO_totoxidias` (172) y `NEO_infeccionoso` (173) tienen faltantes; el 3.2 decide si las usa (por ejemplo, junto con `NEO_HOSP`) o las descarta. Hay pares redundantes (`NEO_ECN` / `NEO_ECN02`, `NEO_ventilacion` / `NEO_ventilation_neonatalallsample`, `NEO_pesosal` / `NEO_pesosalcat`, `NEO_gestasal` / `NEO_gestasalcat`): el 3.2 debe elegir una de cada par.
+
+---
+
+## DEC-023 — Dos usos separados: imputador del formulario y dataset de análisis con NEO
+
+- **Fecha:** 2026-10-25 · **Autor:** Martín Quintero · **Estado:** Propuesta (validar con quienes tomen el 3.2 y el 3.3); amplía DEC-012
+- **Contexto / issue:** rama `15-31-de-ml-pipeline-mice` (ticket 3.1)
+
+**Decisión.** El ticket 3.1 entrega dos productos con alcances distintos:
+
+| Producto | Variables | Uso |
+|---|---|---|
+| `modelos/imputer_mice.pkl` | Solo las 19 variables del formulario (`contracts/patient.py`) | La API (3.3) y la validación cruzada del 3.2 |
+| `data/processed/clinical_imputed.parquet` | Las 19 del formulario imputadas **más** las 21 columnas NEO sin imputar | Análisis del 3.2 y Objetivo 4 de la propuesta |
+
+**Motivo.** El Objetivo 4 busca variables perinatales asociadas a la resiliencia, y la sepsis nosocomial (NEO) fue el predictor número 1 del Grupo 27; dejar NEO fuera del análisis empobrecería la Fase 3. Pero la API solo recibe las variables del formulario: un imputador o un modelo que requiera NEO no se podría usar en producción. Como NEO no necesita imputación (DEC-022), incluirlo en el dataset de análisis no complica el imputador.
+
+**Alternativas descartadas.**
+- *Solo el formulario en todo* (DEC-012 estricta): pierde las variables perinatales más informativas para la investigación.
+- *NEO dentro del imputador*: obligaría a la API a recibir NEO, y además NEO no tiene faltantes que imputar.
+
+**Consecuencias.** El 3.2 puede entrenar dos familias de modelos: uno **desplegable**, solo con variables del formulario, y uno **de investigación**, con NEO. Si el modelo de investigación muestra que NEO aporta, ese resultado justifica agregar campos al formulario (2.4) en un ticket aparte.
+
+---
+
+## DEC-024 — Configuración del imputador MICE
+
+- **Fecha:** 2026-10-25 · **Autor:** Martín Quintero · **Estado:** Aceptada
+- **Contexto / issue:** rama `15-31-de-ml-pipeline-mice` (ticket 3.1); implementa DEC-012
+
+**Decisión.** `src/data/imputation.py` define el imputador como un `Pipeline` de sklearn en tres pasos: conversión HOME (DEC-021), `IterativeImputer` y recálculo del total HOME.
+
+| Aspecto | Configuración |
+|---|---|
+| Variables | Las 19 del formulario, leídas de `contracts/patient.py` (única fuente de verdad); el total HOME no se imputa, se recalcula |
+| Muestra de ajuste | Los 441 sujetos del ECA (DEC-012) |
+| Método | `IterativeImputer` (MICE, estimador `BayesianRidge`), `max_iter = 25`, `random_state = 42`; converge en 4 iteraciones con los datos reales |
+| Límites | Subescalas HOME acotadas a 0–N |
+| Imputación del `.pkl` y de `processed/` | Única, con la media condicional (`sample_posterior = False`) |
+| Imputación múltiple | `build_imputer(random_state=s, sample_posterior=True)` con distintas semillas, dentro de cada fold del 3.2 |
+| Marcas | `home_raw_imputado` (166 sujetos) y `home_fact_imputado` (206) |
+| Fuga de información | Target, `SW_motor`, hardware motor, neuroimagen y NHPT quedan fuera; una prueba lo verifica |
+| Privacidad | `BirthDate` no se exporta a `processed/` (cumple DEC-005) |
+| Almacenamiento del `.pkl` | `modelos/` ignorado por Git; versionar con DVC (`dvc add modelos/imputer_mice.pkl`) |
+
+**Motivo.** Un `Pipeline` serializado garantiza que la API aplique exactamente la misma conversión, imputación y recálculo que el entrenamiento. La imputación única es necesaria para tener un dataset y un `.pkl` reproducibles; la múltiple refleja la incertidumbre y corresponde a la evaluación del 3.2.
+
+**Alternativas descartadas.**
+- *Solo imputación múltiple*: no produce un único `.pkl` para la API.
+- *KNNImputer*: guarda las filas de entrenamiento dentro del `.pkl`, lo que expondría datos de pacientes.
+
+**Consecuencias.**
+- **La imputación única subestima la varianza:** el total HOME imputado tiene desviación estándar 0.9, frente a 4.7 en los observados, porque MICE con la media condicional asigna valores cercanos al promedio. Al 37.6% de los sujetos le falta todo el bloque HOME (solo se predice a partir de 5 variables completas: edad gestacional, peso, sexo y los dos índices de fragilidad), así que el 3.2 debe usar las marcas `home_*_imputado` o imputación múltiple antes de concluir sobre el HOME.
+- **El `.pkl` depende del código:** referencia funciones de `src.data.imputation`, así que la imagen de la API (3.3) debe incluir `src/` además de `contracts/`. El script se ejecuta desde el módulo importado para que el `.pkl` no quede ligado a `__main__` (una prueba lo verifica cargándolo desde otro proceso).
+- **mypy:** se agregó en `pyproject.toml` un override para no reportar los errores de tipos de `contracts/patient.py` (ticket 2.4) al seguir el import; `mypy contracts/` los sigue mostrando.
