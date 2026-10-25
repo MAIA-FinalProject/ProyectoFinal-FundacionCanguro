@@ -100,9 +100,12 @@ def test_merge_and_filter_cohort_fit_sample(
 
     assert len(merged) == 30  # Solo los fit_sample == True
     assert merged["fit_sample"].all()
-    assert {"code", "hw_motor_qc", "BIRTH_sexo5", "FOLLOW_Fragility_Rasch_441_2PL"} <= set(
-        merged.columns
-    )
+    assert {
+        "code",
+        "hw_motor_qc",
+        "BIRTH_sexo5",
+        "FOLLOW_Fragility_Rasch_441_2PL",
+    } <= set(merged.columns)
     assert {"NHPT_promedioMD", "NHPT_promedioMND"} <= set(merged.columns)
 
 
@@ -146,15 +149,21 @@ def test_fit_resilience_model_and_residuals(
     # 30 fit_sample iniciales - 2 nulos en hw_motor_qc - 1 nulo en fragilidad = 27 filas
     assert len(modeled) == 27
     assert 0.0 <= r2 <= 1.0
-    assert len(model.coef_) == 3
+    assert len(model.coef_) == 1  # Modelo univariado principal: hw_motor_qc
 
-    # Los residuales OLS deben sumar ~0
+    # Columnas principales y de sensibilidad
+    assert {"resilience_score", "is_resilient", "is_resilient_median"} <= set(
+        modeled.columns
+    )
+    assert {"resilience_score_ols", "resilience_score_adj", "is_resilient_adj"} <= set(
+        modeled.columns
+    )
+
     residuals = modeled["resilience_score"]
-    assert abs(residuals.mean()) < 1e-10
-
-    # is_resilient debe ser booleano y corresponder exactamente a residual > 0
     assert modeled["is_resilient"].dtype == bool
     assert (modeled["is_resilient"] == (residuals > 0.0)).all()
+    assert modeled["is_resilient_median"].dtype == bool
+    assert (modeled["is_resilient_median"] == (residuals > np.median(residuals))).all()
 
 
 def test_build_target_end_to_end(
@@ -177,7 +186,7 @@ def test_build_target_end_to_end(
 
     target_df, model, r2 = bt.build_target(hw_path, interim_dir)
 
-    assert list(target_df.columns) == ["code", "SW_motor", "resilience_score", "is_resilient"]
+    assert set(bt.OUTPUT_COLS) == set(target_df.columns)
     assert len(target_df) == 27
     assert target_df["is_resilient"].isin([True, False]).all()
     assert 0.0 <= r2 <= 1.0
@@ -215,12 +224,15 @@ def test_main_cli_execution(
 
     assert out_path.exists()
     written = pd.read_parquet(out_path)
-    assert list(written.columns) == ["code", "SW_motor", "resilience_score", "is_resilient"]
+    assert set(bt.OUTPUT_COLS) == set(written.columns)
     assert len(written) == 27
 
 
 @pytest.mark.skipif(
-    not (bt.DEFAULT_HW_PATH.exists() and (bt.DEFAULT_INTERIM_DIR / "canguro.parquet").exists()),
+    not (
+        bt.DEFAULT_HW_PATH.exists()
+        and (bt.DEFAULT_INTERIM_DIR / "canguro.parquet").exists()
+    ),
     reason="Requiere los archivos reales del pipeline (hw_motor.parquet e interim)",
 )
 def test_real_target_execution() -> None:
@@ -228,5 +240,6 @@ def test_real_target_execution() -> None:
     target_df, model, r2 = bt.build_target()
     assert len(target_df) > 150  # Esperado ~168 con control de calidad de imagen
     assert "is_resilient" in target_df.columns
+    assert "resilience_score_adj" in target_df.columns
     assert 0.0 <= r2 <= 1.0
-    assert len(model.coef_) == 3
+    assert len(model.coef_) == 1

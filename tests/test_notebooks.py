@@ -23,7 +23,9 @@ def run_notebook(notebook_path: Path, timeout: int = 300) -> None:
 
 
 @pytest.mark.skipif(
-    not (NOTEBOOKS_DIR.parent / "data" / "features" / "target_resilience.parquet").exists(),
+    not (
+        NOTEBOOKS_DIR.parent / "data" / "features" / "target_resilience.parquet"
+    ).exists(),
     reason="Requiere que el target y las features reales estén generadas por el pipeline.",
 )
 def test_02_resilience_phenotype_notebook_executes() -> None:

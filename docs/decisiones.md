@@ -51,6 +51,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-017](#dec-017--composición-y-signos-del-índice-hw_motor) | Composición y signos del índice `hw_motor` | Metodología | Propuesta |
 | [DEC-018](#dec-018--estandarización-del-índice-robusta-como-principal-clásica-como-sensibilidad) | Estandarización del índice: robusta como principal, clásica como sensibilidad | Metodología | Propuesta |
 | [DEC-019](#dec-019--calidad-de-imagen-se-marca-y-se-ofrece-un-índice-filtrado) | Calidad de imagen: se marca y se ofrece un índice filtrado | Datos | Propuesta |
+| [DEC-020](#dec-020--target-de-resiliencia-motora-huberregressor-univariado-como-principal-ols-y-ajuste-clínico-como-sensibilidad) | Target de resiliencia motora: HuberRegressor univariado como principal, OLS y ajuste clínico como sensibilidad | Metodología | Aceptada |
 
 ---
 
@@ -402,3 +403,28 @@ Quedan fuera del índice, pero se exportan: área ajustada, grosor, curvatura, A
 - *Ignorar la calidad*: el movimiento sesga las métricas de difusión y de superficie.
 
 **Consecuencias.** `hw_motor_qc` tiene 203 prematuros con valor (168 dentro de `fit_sample`), frente a 257 de `hw_motor`. El 2.2 debe elegir cuál es el análisis principal; se recomienda `hw_motor_qc` como principal y `hw_motor` como sensibilidad, o al revés, pero registrándolo aquí. La escala se estima con toda la `fit_sample`, así que ambos índices quedan en la misma escala.
+
+---
+
+## DEC-020 — Target de resiliencia motora: HuberRegressor univariado como principal, OLS y ajuste clínico como sensibilidad
+
+- **Fecha:** 2026-10-24 · **Autor:** Martín Quintero / María Paula Saa · **Estado:** Aceptada
+- **Contexto / issue:** revisión de PR #25 (ticket 2.2); conecta con DEC-007, DEC-010, DEC-011, DEC-018 y DEC-019
+
+**Decisión.** 
+1. El target principal de resiliencia motora se define como el residual de una regresión univariada robusta de Huber: `SW_motor ~ hw_motor_qc` (`HuberRegressor`).
+2. Las covariables perinatales (`BIRTH_sexo5` y `FOLLOW_Fragility_Rasch_441_2PL`) se excluyen de la regresión que define el target y se reservan como predictores o covariables en los modelos supervisados de la Fase 3 (Tickets 3.1 y 3.2).
+3. La etiqueta binaria principal `is_resilient` utiliza el corte conceptual en cero (`resilience_score > 0`, "rendimiento motor superior al esperado por el hardware cerebral", 53.6% en datos reales). Como análisis complementario, se exporta `is_resilient_median` con corte en la mediana de los residuales (garantizando un balance 50/50 exacto).
+4. Como análisis de sensibilidad para la Fase 3, se exportan además `resilience_score_ols` (regresión OLS univariada) y `resilience_score_adj` (regresión ajustada por sexo y fragilidad), junto con su etiqueta `is_resilient_adj`.
+
+**Motivo.**
+- *Exclusión de covariables en el target:* Por propiedades matemáticas de la proyección lineal, incluir sexo y fragilidad en el modelo del target fuerza una correlación residual de cero ($r = 0.000$) con ambas variables. Esto impediría que el Objetivo 4 del proyecto y el Ticket 3.2 evalúen el rol pronóstico o protector del sexo y la fragilidad perinatal. Además, conceptualmente la resiliencia representa la discrepancia entre el daño cerebral estructural (hardware) y el desempeño funcional (software), en concordancia con DEC-011 y la propuesta (§2.3).
+- *Uso de HuberRegressor en vez de OLS:* Los tiempos de la prueba NHPT presentan colas asimétricas inferiores severas (asimetría = −2.58, sujeto más lento con $SW\_motor = -11.63$ y 6–7 observaciones con distancia de Cook > 4/n). OLS minimiza el error cuadrático medio, por lo que esos pocos sujetos atípicos sesgan drásticamente la pendiente (de 0.311 a 0.544) y distorsionan los coeficientes. La pérdida de Huber trata los residuos grandes de forma lineal, proporcionando una estimación no sesgada del sustrato cerebral representativo de la cohorte, en coherencia con DEC-010 y DEC-018.
+- *Umbral de corte:* El corte en cero define la resiliencia de forma clínica e interpretable ("rendimiento funcional positivo por encima de la expectativa cerebral") y, gracias a la robustez de Huber, produce un balance equilibrado (53.6% resilientes, 90/168). El corte en la mediana ofrece una partición 50/50 exacta (84/168) para comparaciones en el entrenamiento supervisado.
+
+**Alternativas descartadas.**
+- *Target ajustado como principal:* Elimina la correlación con la fragilidad y el sexo antes de entrenar los modelos clínicos del Sprint 3.
+- *Solo OLS:* Altamente vulnerable a los valores extremos de NHPT.
+
+**Consecuencias.** En los datos reales, las etiquetas de la versión univariada y la ajustada coinciden en un 93.5% (con OLS) y 98.8% (con Huber), lo que demuestra alta estabilidad. Conceptualmente el target ahora permite explorar qué variables clínicas tempranas explican la resiliencia en el Sprint 3.
+
