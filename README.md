@@ -31,6 +31,7 @@ Este repositorio contiene la arquitectura base y la infraestructura para el **Pr
 │   ├── data/             # Módulos para carga, limpieza e ingesta de datos
 │   ├── features/         # Módulos para ingeniería de características (feature engineering)
 │   └── models/           # Módulos para entrenamiento, evaluación e inferencia de modelos
+├── modelos/              # Modelos ajustados (imputador MICE, clasificadores); ignorado por Git, versionar con DVC
 ├── tests/                # Pruebas unitarias y de integración (Pytest)
 ├── .gitignore            # Exclusiones estándar y reglas para datos / DVC
 ├── .pre-commit-config.yaml # Configuración de hooks de calidad de código (Ruff, Mypy, etc.)
@@ -179,6 +180,32 @@ uv run python -m src.pipeline --only hardware_motor   # equivalente, desde el or
 | `hw_motor`, `hw_motor_classic`, `hw_motor_qc` | Índice compuesto: z robusto, z clásico y z robusto solo con buena calidad de imagen |
 
 Las métricas sin sufijo son **absolutas** y son las que se usan para el contraste término vs prematuros. Cerebelo, tálamo y el resto de la corteza quedan fuera por construcción (lista cerrada `FEATURE_MAP`).
+
+### Imputación MICE (`src/data/imputation.py`)
+
+Imputa con MICE las 19 variables del formulario del paciente (`contracts/patient.py`) en los 441 sujetos del ECA y genera el dataset de análisis (decisiones DEC-021 a DEC-024).
+
+```bash
+uv run python -m src.data.imputation
+uv run python -m src.pipeline --only imputacion   # equivalente, desde el orquestador
+```
+
+| | |
+|---|---|
+| **Entrada** | `data/interim/{canguro,tradicional}.parquet` |
+| **Salida** | `data/processed/clinical_imputed.parquet` (441 filas) y `modelos/imputer_mice.pkl` |
+
+| Grupo de columnas | Contenido |
+|---|---|
+| Identificación | `code`, `ubicac`, `lessthan1801g` |
+| Formulario imputado | Edad gestacional, peso, sexo, fragilidad Rasch 441 y 746, edad de la visita HOME y factores HOME |
+| `HOMET_*_std` | Subescalas HOME en la escala estándar de Caldwell y Bradley (0–N ítems) y total estándar (0–45), recalculado como suma |
+| `home_raw_imputado`, `home_fact_imputado` | Marcan a los sujetos con subescalas o factores HOME imputados |
+| `NEO_*` | Bloque neonatal tal como lo entrega la Fundación, **sin imputar** (su faltante es estructural, DEC-022) |
+
+- **Sin fuga de información:** el target de resiliencia, `SW_motor`, el hardware motor, la neuroimagen y el NHPT no entran al imputador. `BirthDate` no se exporta.
+- **El `.pkl` es un `Pipeline` de sklearn** (conversión HOME → MICE → total HOME), listo para la API. Para la validación cruzada del 3.2 usa `build_imputer()`, que devuelve el imputador sin ajustar; con `sample_posterior=True` y distintas semillas se obtienen imputaciones múltiples.
+- **El HOME de la base usa una codificación ±1 por ítem** (inferida, pendiente de confirmar con la Fundación, DEC-021). Si un valor no es compatible, el script falla en vez de convertirlo mal.
 
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 
