@@ -5,6 +5,10 @@ services:
       dockerfile: api/Dockerfile
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      MODEL_DIR: /app/modelos
+    volumes:
+      - ../modelos:/app/modelos:ro
     healthcheck:
       test:
         - CMD
