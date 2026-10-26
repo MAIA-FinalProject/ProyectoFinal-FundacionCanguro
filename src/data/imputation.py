@@ -157,7 +157,7 @@ def home_to_standard(X: pd.DataFrame) -> pd.DataFrame:
         present = (out[col] + n_items) / 2
         valid = present.isna() | (present.between(0, n_items) & (present % 1 == 0))
         if not valid.all():
-            bad = sorted(out.loc[~valid, col].unique())
+            bad = sorted(float(value) for value in out.loc[~valid, col].unique())
             raise ValueError(
                 f"{col}: valores incompatibles con la codificación ±1 de "
                 f"{n_items} ítems: {bad}"

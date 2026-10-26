@@ -115,7 +115,8 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo HOME de responsividad: respuestas e interacción "
-            "del cuidador con el niño."
+            "del cuidador con el niño. El modelo espera una suma de 11 ítems "
+            "codificados ±1 (−11, −9, …, 11); si falta el dato, déjalo vacío."
         ),
     ),
     PatientInputField(
@@ -127,7 +128,8 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo HOME de aceptación del cuidador frente al "
-            "comportamiento del niño."
+            "comportamiento del niño. El modelo espera una suma de 8 ítems "
+            "codificados ±1 (−8, −6, …, 8); si falta el dato, déjalo vacío."
         ),
     ),
     PatientInputField(
@@ -139,7 +141,8 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo HOME de organización del ambiente y las rutinas "
-            "del hogar."
+            "del hogar. El modelo espera una suma de 6 ítems codificados ±1 "
+            "(−6, −4, …, 6); si falta el dato, déjalo vacío."
         ),
     ),
     PatientInputField(
@@ -151,7 +154,9 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo HOME sobre disponibilidad de materiales y "
-            "oportunidades de aprendizaje en el hogar."
+            "oportunidades de aprendizaje en el hogar. El modelo espera una "
+            "suma de 9 ítems codificados ±1 (−9, −7, …, 9); si falta el "
+            "dato, déjalo vacío."
         ),
     ),
     PatientInputField(
@@ -163,7 +168,9 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo HOME de involucramiento del cuidador en las "
-            "actividades e interacciones con el niño."
+            "actividades e interacciones con el niño. El modelo espera una "
+            "suma de 6 ítems codificados ±1 (−6, −4, …, 6); si falta el "
+            "dato, déjalo vacío."
         ),
     ),
     PatientInputField(
@@ -175,7 +182,8 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo HOME de variedad de experiencias y actividades "
-            "en el hogar."
+            "en el hogar. El modelo espera una suma de 5 ítems codificados "
+            "±1 (−5, −3, −1, 1, 3, 5); si falta el dato, déjalo vacío."
         ),
     ),
     PatientInputField(
@@ -187,7 +195,9 @@ PATIENT_INPUT_FIELDS: tuple[PatientInputField, ...] = (
         kind="number",
         help_text=(
             "Puntaje crudo total de la escala HOME a los 12 meses; "
-            "corresponde al agregado reportado por la fuente."
+            "corresponde al agregado reportado por la fuente. El modelo "
+            "espera una suma de 45 ítems codificados ±1 (−45, −43, …, 45); "
+            "si falta el dato, déjalo vacío."
         ),
     ),
     PatientInputField(

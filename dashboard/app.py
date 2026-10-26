@@ -10,6 +10,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from contracts.patient import PATIENT_INPUT_FIELDS, PatientInputField, PatientInputs
+from dashboard.api_client import PredictionApiError, request_prediction
 
 
 def _render_field(field: PatientInputField) -> object:
@@ -207,10 +208,14 @@ st.html(
 st.title("Proyecto Canguro")
 st.caption("Formulario inicial de datos clínicos del paciente.")
 st.info(
-    "Esta pantalla valida y muestra el payload JSON para la futura API. "
-    "Todavía no envía datos a un servicio de inferencia. Las ayudas describen "
+    "Esta pantalla valida los datos y los envía a la API de inferencia. "
+    "Las ayudas describen "
     "las variables del codebook; no representan rangos ni recomendaciones clínicas. "
     "Los campos numéricos no aceptan notación científica (e/E)."
+)
+st.warning(
+    "El modelo base es experimental y su desempeño fue cercano al azar durante "
+    "la validación. Esta predicción no debe usarse para tomar decisiones clínicas."
 )
 
 with st.sidebar:
@@ -219,7 +224,12 @@ with st.sidebar:
         with urlopen(f"{API_BASE_URL}/health", timeout=5) as response:
             health_status = json.load(response)
         st.success("API disponible")
-        st.json(health_status)
+        if health_status.get("model_ready"):
+            st.caption("Artefactos del modelo disponibles.")
+        else:
+            st.warning(
+                "La API responde, pero todavía no tiene los artefactos del modelo."
+            )
     except (OSError, ValueError) as error:
         st.error("No fue posible consultar la API.")
         st.caption(f"Destino: {API_BASE_URL}/health · Detalle: {error}")
@@ -238,7 +248,8 @@ with st.form("patient_inputs_form"):
             if section == "Seguimiento a los 12 meses":
                 st.caption(
                     "Completa únicamente las mediciones disponibles. "
-                    "Los campos sin dato se omiten del payload."
+                    "Los campos opcionales vacíos se envían como nulos para que "
+                    "el imputador aplique el mismo preprocesamiento del modelo."
                 )
 
             for subgroup, fields in subgroups.items():
@@ -252,7 +263,7 @@ with st.form("patient_inputs_form"):
                     form_values.update(_render_fields(fields))
 
     submitted = st.form_submit_button(
-        "Validar y generar payload JSON", type="primary"
+        "Validar y generar predicción", type="primary"
     )
 
 if submitted:
@@ -262,9 +273,27 @@ if submitted:
         st.error("Revisa los campos requeridos y sus tipos de dato.")
         st.json(error.errors(include_input=False, include_url=False))
     else:
-        st.success("Datos válidos. Payload de ejemplo para la API:")
-        st.json(
-            patient_inputs.model_dump(
-                mode="json", by_alias=True, exclude_none=True
-            )
+        payload = patient_inputs.model_dump(
+            mode="json", by_alias=True, exclude_none=False
         )
+        st.success("Datos válidos. Payload enviado a la API:")
+        st.json(payload)
+        try:
+            result = request_prediction(API_BASE_URL, payload)
+            prediction = int(result["prediction"])
+            probability = float(result["probability_resilient"])
+            st.subheader("Resultado de la predicción")
+            st.metric(
+                "Clasificación estimada",
+                "Resiliente (1)" if prediction == 1 else "No resiliente (0)",
+            )
+            st.metric("Probabilidad estimada de resiliencia", f"{probability:.1%}")
+        except (PredictionApiError, KeyError, TypeError, ValueError) as error:
+            if isinstance(error, PredictionApiError) and error.status_code == 503:
+                st.warning(
+                    "No se generó la predicción porque los artefactos del modelo "
+                    "no están disponibles en la API."
+                )
+                st.caption(str(error))
+            else:
+                st.error(f"No fue posible obtener la predicción: {error}")

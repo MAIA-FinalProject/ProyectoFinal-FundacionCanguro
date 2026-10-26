@@ -14,9 +14,11 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY api ./api
 COPY contracts ./contracts
+COPY src ./src
 
 ENV PATH="/app/.venv/bin:${PATH}" \
-    PYTHONPATH="/app"
+    PYTHONPATH="/app" \
+    MODEL_DIR="/app/modelos"
 
 USER app
 
