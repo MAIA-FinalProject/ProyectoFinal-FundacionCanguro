@@ -12,3 +12,7 @@ __pycache__
 .pytest_cache
 .ruff_cache
 .mypy_cache
+
+# Modelos entrenados: no van en las imágenes (se montan como volumen)
+modelos
+*.pkl

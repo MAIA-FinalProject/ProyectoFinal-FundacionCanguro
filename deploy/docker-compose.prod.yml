@@ -1,0 +1,41 @@
+# Despliegue en la nube (EC2). Uso, desde la raíz del repositorio:
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+# Los puertos quedan publicados en la instancia; el acceso se limita con el
+# grupo de seguridad de EC2 (solo las IP del equipo). Los modelos NO van en la
+# imagen: se copian a modelos/ en la instancia y se montan en solo lectura.
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_DIR: /app/modelos
+    volumes:
+      - ../modelos:/app/modelos:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
+    environment:
+      # El dashboard llama a la API por el nombre del servicio, dentro de la red de Compose.
+      API_BASE_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
