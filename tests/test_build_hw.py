@@ -104,6 +104,15 @@ def test_icv_adjustment_removes_icv_and_keeps_units(hw: pd.DataFrame) -> None:
         assert adj.mean() == pytest.approx(fit[col].mean())
 
 
+def test_tract_volume_stays_absolute(hw: pd.DataFrame) -> None:
+    # DEC-026: el volumen del tracto no se ajusta por ICV.
+    assert not [c for c in bh.ICV_ADJUSTED if c.startswith("cst_")]
+    assert not [c for c in hw.columns if c.startswith("cst_") and "icvadj" in c]
+    assert {"cst_lh_vol", "cst_rh_vol"} <= set(hw.columns)
+    # La sustancia gris sí se sigue ajustando (6 ganglios + 24 Brodmann + 8 Desikan).
+    assert len(bh.ICV_ADJUSTED) == 6 + 24 + 8
+
+
 def test_icv_adjustment_only_for_preterm(hw: pd.DataFrame) -> None:
     adjusted = [f"{c}_icvadj" for c in bh.ICV_ADJUSTED]
     assert hw.loc[hw["ubicac"] == 3, adjusted].isna().all().all()
