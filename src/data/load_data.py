@@ -11,7 +11,8 @@ Además aísla el subgrupo de la referencia clasificado como RCIU según las cur
 Fenton (``BIRTH_RCIUFenton = 1``), que la propuesta trata como covariable de ajuste.
 
 Las tablas conservan todas las columnas originales: la limpieza ocurre en etapas
-posteriores.
+posteriores. La única transformación de columnas es unificar los alias de los
+tractos de Tracula (``TRAC_*``), que el Excel escribe de varias formas (DEC-027).
 
 Uso:
     uv run python -m src.data.load_data [--input RUTA] [--output-dir DIR]
@@ -52,6 +53,60 @@ EXPECTED_SIZES = {
     "referencia": 50,
     RCIU_SUBGROUP: 12,
 }
+
+
+# Alias de los tractos de Tracula (DEC-027). El Excel trae 18 tractos x 18 métricas,
+# pero algunos bloques cambian de nombre a mitad del bloque. Se unifica al nombre
+# mayoritario del Excel. Primero se aplican los renombres exactos y luego los de
+# prefijo, porque dos columnas del bloque izquierdo del SLF son ambiguas.
+TRACT_EXACT_RENAMES = {
+    # Primera columna del bloque SLF parietal izquierdo, que lleva el nombre del
+    # bloque siguiente (posición en el Excel y r = 0.96 con el resto del bloque).
+    "TRAC_Left_superior_longfascparietalendings_AD_Avg": (
+        "TRAC_Left_suplongfascparend_AD_Avg"
+    ),
+    # AD_Avg del bloque siguiente; el sufijo "_A" evitaba el nombre duplicado.
+    "TRAC_Left_superior_longfascparietalendings_AD_Avg_A": (
+        "TRAC_Left_suplongfasctempend_AD_Avg"
+    ),
+}
+TRACT_PREFIX_RENAMES = {
+    # El bloque se llama "parietal" pero ocupa el lugar del SLF temporal en el orden
+    # de Tracula y su longitud (~48) coincide con el SLF temporal derecho (~49), no
+    # con el parietal (~35-39). Pendiente de confirmar con la Fundación.
+    "TRAC_Left_superior_longfascparietalendings_": "TRAC_Left_suplongfasctempend_",
+    "TRAC_Right_cingulum_angular_bundle_": "TRAC_Right_cingulumangular_bundle_",
+    "TRAC_Right_cingulum_cingulate_gyrus_endings_": (
+        "TRAC_Right_cingulumcingulate_gyrus_endings_"
+    ),
+    "TRAC_Corpus_callosumforceps_minor_": "TRAC_Corpus_callosum_forceps_minor_",
+}
+
+
+def harmonize_tract_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Unifica los alias de los tractos de Tracula (DEC-027).
+
+    Raises:
+        ValueError: si el renombre produce columnas duplicadas.
+    """
+    mapping = {}
+    for col in df.columns:
+        new = TRACT_EXACT_RENAMES.get(col)
+        if new is None:
+            for old_prefix, new_prefix in TRACT_PREFIX_RENAMES.items():
+                if col.startswith(old_prefix):
+                    new = new_prefix + col[len(old_prefix) :]
+                    break
+        if new is not None:
+            mapping[col] = new
+
+    out = df.rename(columns=mapping)
+    duplicated = out.columns[out.columns.duplicated()].tolist()
+    if duplicated:
+        raise ValueError(f"El renombre de tractos duplica columnas: {duplicated}")
+    if mapping:
+        logger.info("Tractos de Tracula: %d columnas renombradas", len(mapping))
+    return out
 
 
 def load_raw(path: Path = RAW_PATH) -> pd.DataFrame:
@@ -176,7 +231,7 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    df = load_raw(args.input)
+    df = harmonize_tract_names(load_raw(args.input))
     if len(df) != EXPECTED_TOTAL:
         raise ValueError(f"Se esperaban {EXPECTED_TOTAL} sujetos, hay {len(df)}.")
 

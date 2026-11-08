@@ -123,7 +123,62 @@ def test_load_raw_rejects_invalid_data(
         ld.load_raw(path)
 
 
+def test_harmonize_tract_names() -> None:
+    df = pd.DataFrame(
+        columns=[
+            "code",
+            "TRAC_Left_superior_longfascparietalendings_AD_Avg",
+            "TRAC_Left_suplongfascparend_FA_Avg",
+            "TRAC_Left_superior_longfascparietalendings_AD_Avg_A",
+            "TRAC_Left_superior_longfascparietalendings_FA_Avg",
+            "TRAC_Right_cingulumangular_bundle_FA_Avg",
+            "TRAC_Right_cingulum_angular_bundle_Volume",
+            "TRAC_Right_cingulum_cingulate_gyrus_endings_Volume",
+            "TRAC_Corpus_callosumforceps_minor_Volume",
+            "TRAC_Left_corticospinal_tract_Volume",
+        ]
+    )
+    out = ld.harmonize_tract_names(df)
+    assert list(out.columns) == [
+        "code",
+        "TRAC_Left_suplongfascparend_AD_Avg",
+        "TRAC_Left_suplongfascparend_FA_Avg",
+        "TRAC_Left_suplongfasctempend_AD_Avg",
+        "TRAC_Left_suplongfasctempend_FA_Avg",
+        "TRAC_Right_cingulumangular_bundle_FA_Avg",
+        "TRAC_Right_cingulumangular_bundle_Volume",
+        "TRAC_Right_cingulumcingulate_gyrus_endings_Volume",
+        "TRAC_Corpus_callosum_forceps_minor_Volume",
+        "TRAC_Left_corticospinal_tract_Volume",
+    ]
+
+
+def test_harmonize_rejects_duplicates() -> None:
+    df = pd.DataFrame(
+        columns=[
+            "TRAC_Right_cingulumangular_bundle_Volume",
+            "TRAC_Right_cingulum_angular_bundle_Volume",
+        ]
+    )
+    with pytest.raises(ValueError, match="duplica"):
+        ld.harmonize_tract_names(df)
+
+
 @pytest.mark.skipif(not ld.RAW_PATH.exists(), reason="Requiere datos reales (dvc pull)")
 def test_real_data_matches_proposal() -> None:
     cohorts = ld.split_cohorts(ld.load_raw())
     ld.validate_cohorts(cohorts)
+
+
+@pytest.mark.skipif(not ld.RAW_PATH.exists(), reason="Requiere datos reales (dvc pull)")
+def test_real_data_tracts_are_complete_after_harmonizing() -> None:
+    df = ld.harmonize_tract_names(ld.load_raw())
+    metrics = (
+        pd.Series([c for c in df.columns if c.startswith("TRAC_") and c != "TRAC_"])
+        .str.extract(r"^(TRAC_.+?)_((?:FA|MD|RD|AD|Len)_\w+|Count|Volume)$")
+        .dropna()
+    )
+    per_tract = metrics.groupby(0)[1].nunique()
+    # 18 tractos de Tracula (2 del cuerpo calloso + 8 por hemisferio), 18 métricas.
+    assert len(per_tract) == 18
+    assert (per_tract == 18).all(), per_tract[per_tract != 18].to_dict()

@@ -3,7 +3,7 @@
 Extrae de las cohortes de ``data/interim/`` las métricas de neuroimagen de las ROI
 motoras pre-especificadas, ajusta por ICV las que escalan con el tamaño cerebral y
 construye el índice compuesto ``hw_motor``. Las decisiones están en
-``docs/decisiones.md`` (DEC-014 a DEC-019).
+``docs/decisiones.md`` (DEC-014 a DEC-019 y DEC-026).
 
 ROI (lista cerrada; cerebelo, tálamo y el resto de la corteza quedan fuera):
 
@@ -19,8 +19,9 @@ Salida (``data/features/hw_motor.parquet``), una fila por sujeto con RM:
 - Identificación y calidad: ``code``, ``ubicac``, ``lessthan1801g``,
   ``fit_sample``, ``qc_dti_ok``, ``qc_mprage_mov``, ``qc_ok``, ``icv``.
 - Métricas absolutas por ROI (contraste término vs prematuros).
-- ``*_icvadj``: volumen y área ajustados por ICV (contrastes intra-prematuros);
-  vacíos en la referencia.
+- ``*_icvadj``: volumen y área de sustancia gris ajustados por ICV (contrastes
+  intra-prematuros); vacíos en la referencia. El volumen del tracto
+  (``cst_*_vol``) no se ajusta (DEC-026).
 - ``hw_motor`` (z robusto), ``hw_motor_classic`` (z clásico) y ``hw_motor_qc``
   (``hw_motor`` solo para sujetos con buena calidad de imagen).
 
@@ -99,8 +100,11 @@ def build_feature_map() -> dict[str, str]:
 
 FEATURE_MAP = build_feature_map()
 
-# Se ajustan por ICV solo las métricas que escalan con el tamaño cerebral.
-ICV_ADJUSTED = [f for f in FEATURE_MAP if f.endswith(("_vol", "_area"))]
+# Se ajustan por ICV solo el volumen y el área de la sustancia gris (DEC-016). El
+# volumen del tracto corticoespinal se conserva absoluto (DEC-026).
+ICV_ADJUSTED = [
+    f for f in FEATURE_MAP if f.endswith(("_vol", "_area")) and not f.startswith("cst_")
+]
 
 # Componentes del índice y su signo (+1: mayor = mejor sustrato).
 INDEX_COMPONENTS: dict[str, int] = {

@@ -47,7 +47,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-013](#dec-013--orquestación-del-pipeline-módulo-de-python-con-makefile-como-atajo) | Orquestación del pipeline: módulo de Python con `Makefile` como atajo | Infraestructura | Aceptada |
 | [DEC-014](#dec-014--atlas-cortical-brodmann-como-principal-desikan-como-sensibilidad) | Atlas cortical: Brodmann como principal, Desikan como sensibilidad | Metodología | Aceptada |
 | [DEC-015](#dec-015--lista-cerrada-de-roi-y-métricas-del-hardware-motor) | Lista cerrada de ROI y métricas del hardware motor | Datos | Aceptada |
-| [DEC-016](#dec-016--ajuste-por-icv-solo-volumen-y-área-forma-de-volumen-ajustado) | Ajuste por ICV: solo volumen y área, forma de volumen ajustado | Metodología | Aceptada |
+| [DEC-016](#dec-016--ajuste-por-icv-solo-volumen-y-área-forma-de-volumen-ajustado) | Ajuste por ICV: solo volumen y área, forma de volumen ajustado | Metodología | Aceptada (tracto: DEC-026) |
 | [DEC-017](#dec-017--composición-y-signos-del-índice-hw_motor) | Composición y signos del índice `hw_motor` | Metodología | Propuesta |
 | [DEC-018](#dec-018--estandarización-del-índice-robusta-como-principal-clásica-como-sensibilidad) | Estandarización del índice: robusta como principal, clásica como sensibilidad | Metodología | Propuesta |
 | [DEC-019](#dec-019--calidad-de-imagen-se-marca-y-se-ofrece-un-índice-filtrado) | Calidad de imagen: se marca y se ofrece un índice filtrado | Datos | Propuesta |
@@ -57,6 +57,8 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-023](#dec-023--dos-usos-separados-imputador-del-formulario-y-dataset-de-análisis-con-neo) | Dos usos separados: imputador del formulario y dataset de análisis con NEO | Metodología | Propuesta |
 | [DEC-024](#dec-024--configuración-del-imputador-mice) | Configuración del imputador MICE | Metodología | Aceptada |
 | [DEC-025](#dec-025--modelo-base-de-resiliencia-regresión-logística-regularizada-resultado-equivalente-al-azar) | Modelo base de resiliencia: regresión logística regularizada, resultado equivalente al azar | Metodología | Aceptada |
+| [DEC-026](#dec-026--el-volumen-del-tracto-corticoespinal-no-se-ajusta-por-icv) | El volumen del tracto corticoespinal no se ajusta por ICV | Metodología | Aceptada |
+| [DEC-027](#dec-027--nomenclatura-unificada-de-los-tractos-de-tracula) | Nomenclatura unificada de los tractos de Tracula | Datos | Propuesta (confirmar SLF izquierdo con la Fundación) |
 
 ---
 
@@ -319,7 +321,7 @@ El ICV es `ASEG_EstimatedTotalIntraCranialV`. La curvatura se exporta pero no en
 
 ## DEC-016 — Ajuste por ICV: solo volumen y área, forma de volumen ajustado
 
-- **Fecha:** 2026-10-18 · **Autor:** Martín Quintero · **Estado:** Aceptada
+- **Fecha:** 2026-10-18 · **Autor:** Martín Quintero · **Estado:** Aceptada; el volumen del tracto, reemplazado por DEC-026
 - **Contexto / issue:** rama `6-21de-modulo-de-features---hardware-motor-y-dilema-icv` (ticket 2.1)
 
 **Decisión.** Las métricas de volumen y área (ganglios, Brodmann, Desikan y volumen del tracto) se ajustan por ICV con `y_ajustado = y − b · (ICV − media_ICV)`. La pendiente `b` y la media del ICV se estiman en la población de DEC-007 (`fit_sample`, n = 209) y se aplican a todos los prematuros con RM. Las columnas ajustadas llevan el sufijo `_icvadj` y quedan vacías en la referencia, donde se usan los valores absolutos.
@@ -593,3 +595,49 @@ En `NEO_ECN` y `NEO_ventilacion`, el valor −1 **no es un código de faltante**
 - *F1 como métrica principal*: engañosa con clases casi parejas.
 
 **Consecuencias.** El informe debe presentar este resultado como hallazgo negativo y limitación, no como un modelo con capacidad predictiva. La API (3.3) puede desplegar `baseline.pkl` como demostración técnica del flujo, pero sus predicciones no deben presentarse como útiles. Un modelo con más información (por ejemplo, variables posteriores al primer año) queda fuera de alcance, y la neuroimagen y el NHPT no pueden ser entradas porque el target sale de ellas. Si cambian el target (DEC-020), el n o las variables del formulario, se vuelve a correr `uv run python -m src.models.train_baseline`.
+
+---
+
+## DEC-026 — El volumen del tracto corticoespinal no se ajusta por ICV
+
+- **Fecha:** 2026-11-06 · **Autor:** Andrés Romero · **Estado:** Aceptada
+- **Contexto / issue:** issue #27 (ticket 4.1), rama `27-41-de-fixrefactor---correccion-de-ajuste-volumétrico-y-nomenclatura-tracula`; reemplaza DEC-016 solo para el volumen del tracto
+
+**Decisión.** El volumen del tracto corticoespinal de Tracula (`cst_lh_vol`, `cst_rh_vol`) se conserva como valor absoluto y deja de tener versión `_icvadj`. El ajuste por ICV de DEC-016 se mantiene igual para el volumen y el área de la sustancia gris (ganglios basales, Brodmann y Desikan: 38 columnas).
+
+**Motivo.** Lo pidió el comité clínico en la revisión del hardware motor. Además, el volumen de Tracula no es una estructura segmentada sino el volumen de la trayectoria probabilística reconstruida, que depende de la tractografía y no solo del tamaño de la cabeza; su relación con el ICV es la más débil de las métricas que se ajustaban (r = 0.23 en prematuros <1801 g, frente a 0.37–0.61 en volumen y área de sustancia gris, DEC-016).
+
+**Alternativas descartadas.**
+- *Mantener el ajuste*: va en contra de la indicación del comité y corrige una relación débil con un modelo pensado para estructuras anatómicas.
+- *Exportar ambas versiones*: el volumen ajustado del tracto no tiene uso previsto y dejaría abierta una ambigüedad sobre cuál usar.
+
+**Consecuencias.** `hw_motor.parquet` pierde las columnas `cst_lh_vol_icvadj` y `cst_rh_vol_icvadj` (queda con 129 columnas). Como el volumen del tracto no entra al índice (DEC-017), `hw_motor`, `hw_motor_classic`, `hw_motor_qc` y el target de resiliencia no cambian: se verificó que todas las demás columnas y `target_resilience.parquet` son idénticos antes y después.
+
+---
+
+## DEC-027 — Nomenclatura unificada de los tractos de Tracula
+
+- **Fecha:** 2026-11-06 · **Autor:** Andrés Romero · **Estado:** Propuesta (confirmar el SLF izquierdo con la Fundación)
+- **Contexto / issue:** issue #27 (ticket 4.1); amplía DEC-004 y DEC-015
+
+**Decisión.** La ingesta (`src/data/load_data.py`, `harmonize_tract_names`) renombra los alias de los tractos para que cada tracto tenga un solo nombre en `data/interim/`. Se usa el nombre mayoritario del Excel:
+
+| Nombre en el Excel | Nombre unificado | Columnas |
+|---|---|---|
+| `TRAC_Left_superior_longfascparietalendings_AD_Avg` | `TRAC_Left_suplongfascparend_AD_Avg` | 1 |
+| `TRAC_Left_superior_longfascparietalendings_AD_Avg_A` | `TRAC_Left_suplongfasctempend_AD_Avg` | 1 |
+| `TRAC_Left_superior_longfascparietalendings_*` (resto) | `TRAC_Left_suplongfasctempend_*` | 17 |
+| `TRAC_Right_cingulum_angular_bundle_*` | `TRAC_Right_cingulumangular_bundle_*` | 6 |
+| `TRAC_Right_cingulum_cingulate_gyrus_endings_*` | `TRAC_Right_cingulumcingulate_gyrus_endings_*` | 18 |
+| `TRAC_Corpus_callosumforceps_minor_Volume` | `TRAC_Corpus_callosum_forceps_minor_Volume` | 1 |
+
+**Motivo.** El Excel trae 18 tractos (fórceps mayor y menor, y ocho por hemisferio) con 18 métricas cada uno, pero algunos bloques cambian de nombre a mitad del bloque, y un filtro por nombre perdería columnas en silencio. Tres casos son solo ortografía (cíngulo angular y cingulado derechos, fórceps menor). El SLF izquierdo requiere inferencia:
+- En el orden de Tracula, después del SLF parietal va el SLF temporal. El hemisferio derecho trae ambos, pero el izquierdo trae un bloque `suplongfascparend` y otro llamado `superior_longfascparietalendings`, sin ningún SLF temporal.
+- La longitud media del segundo bloque es ~48, igual a la del SLF temporal derecho (~49) y distinta de la del SLF parietal (~35 izquierdo, ~39 derecho). Por eso se reasigna al SLF temporal.
+- La primera columna del bloque parietal izquierdo lleva el nombre del bloque siguiente; por su posición y su correlación con el resto del bloque parietal (r = 0.96, frente a 0.72 con el temporal) se asigna al parietal. La columna `AD_Avg_A` es el `AD_Avg` del bloque temporal (r = 0.94 con su `AD_Avg_Weight`); el sufijo `_A` evitaba un nombre duplicado.
+
+**Alternativas descartadas.**
+- *Unificar en `build_hw.py`*: el índice solo usa el corticoespinal, que no tiene alias; los tractos que necesita la caracterización descriptiva (SLF, fórceps, radiación talámica anterior) se leen de `interim`, así que la corrección debe estar en la ingesta.
+- *Renombrar a nombres nuevos más legibles*: rompería los nombres que ya usan los notebooks y el diccionario de la Fundación.
+
+**Consecuencias.** Con la corrección, cada uno de los 18 tractos tiene exactamente 18 métricas (prueba de integración en `tests/test_load_data.py`). `data/interim/` conserva todas las columnas, pero cambia el nombre de 44 columnas de tractos, lo que matiza DEC-004. El corticoespinal no cambia, así que `hw_motor.parquet` no se ve afectado. La asignación del SLF izquierdo es una inferencia y debe confirmarse con la Fundación; si resulta errada, basta con corregir `TRACT_EXACT_RENAMES` y `TRACT_PREFIX_RENAMES`.

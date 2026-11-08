@@ -133,7 +133,7 @@ data/raw/
 
 ### Ingesta de cohortes (`src/data/load_data.py`)
 
-Lee el Excel maestro y lo separa en las cohortes poblacionales según la variable de asignación `ubicac`, conservando todas las columnas originales (la limpieza ocurre en etapas posteriores).
+Lee el Excel maestro y lo separa en las cohortes poblacionales según la variable de asignación `ubicac`, conservando todas las columnas originales (la limpieza ocurre en etapas posteriores). Lo único que cambia son los alias de los tractos de Tracula, que se unifican a un nombre por tracto (DEC-027).
 
 ```bash
 uv run python -m src.data.load_data                 # exporta en parquet (por defecto)
@@ -176,7 +176,7 @@ uv run python -m src.pipeline --only hardware_motor   # equivalente, desde el or
 | `ba_*` | Brodmann BA4a, BA4p, BA3a, BA3b, BA1, BA2: volumen, área, grosor y curvatura |
 | `dk_*` | Desikan precentral y postcentral (solo sensibilidad, fuera del índice) |
 | `cst_*` | Tracto corticoespinal: FA, MD, RD, AD y volumen |
-| `*_icvadj` | Volumen y área ajustados por ICV, para contrastes entre prematuros (vacíos en la referencia) |
+| `*_icvadj` | Volumen y área de sustancia gris ajustados por ICV, para contrastes entre prematuros (vacíos en la referencia). El volumen del tracto se queda absoluto (DEC-026) |
 | `hw_motor`, `hw_motor_classic`, `hw_motor_qc` | Índice compuesto: z robusto, z clásico y z robusto solo con buena calidad de imagen |
 
 Las métricas sin sufijo son **absolutas** y son las que se usan para el contraste término vs prematuros. Cerebelo, tálamo y el resto de la corteza quedan fuera por construcción (lista cerrada `FEATURE_MAP`).
