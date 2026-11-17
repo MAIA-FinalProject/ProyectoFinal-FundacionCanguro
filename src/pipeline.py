@@ -2,10 +2,11 @@
 
 Ejecuta de extremo a extremo y en orden los módulos del pipeline:
 
-1. ``ingesta``            -> ``src.data.load_data``        (ticket 1.2)
-2. ``hardware_motor``     -> ``src.features.build_hw``     (ticket 2.1)
-3. ``target_resiliencia`` -> ``src.features.build_target`` (ticket 2.2)
-4. ``imputacion``         -> ``src.data.imputation``       (ticket 3.1)
+1. ``ingesta``            -> ``src.data.load_data``            (ticket 1.2)
+2. ``hardware_motor``     -> ``src.features.build_hw``         (ticket 2.1)
+3. ``target_resiliencia`` -> ``src.features.build_target``     (ticket 2.2)
+4. ``hardware_ok``        -> ``src.features.build_hardware_ok`` (ticket 4.5)
+5. ``imputacion``         -> ``src.data.imputation``           (ticket 3.1)
 
 Cada paso se ejecuta como ``python -m <módulo>`` desde la raíz del repo, así que
 las rutas no dependen del directorio desde el que se lance el comando.
@@ -113,6 +114,27 @@ STEPS: tuple[Step, ...] = (
             "data/interim/tradicional.parquet",
         ),
         outputs=("data/features/target_resilience.parquet",),
+        hint="Corre antes: uv run python -m src.pipeline --only hardware_motor",
+    ),
+    Step(
+        name="hardware_ok",
+        module="src.features.build_hardware_ok",
+        script="src/features/build_hardware_ok.py",
+        description="Cohortes comparables, ROIs motoras y target normativo hardware_ok (ticket 4.5)",
+        inputs=(
+            "data/features/hw_motor.parquet",
+            "data/interim/canguro.parquet",
+            "data/interim/tradicional.parquet",
+            "data/interim/referencia.parquet",
+        ),
+        outputs=(
+            "data/features/hardware_ok.parquet",
+            "reports/hardware_ok/tabla1_cohortes.csv",
+            "reports/hardware_ok/nhpt_por_grupo.csv",
+            "reports/hardware_ok/contraste_80_rois_absolutas.csv",
+            "reports/hardware_ok/asociacion_estructura_nhpt.csv",
+            "reports/hardware_ok/calibracion_hardware_ok.json",
+        ),
         hint="Corre antes: uv run python -m src.pipeline --only hardware_motor",
     ),
     Step(
