@@ -59,6 +59,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-025](#dec-025--modelo-base-de-resiliencia-regresión-logística-regularizada-resultado-equivalente-al-azar) | Modelo base de resiliencia: regresión logística regularizada, resultado equivalente al azar | Metodología | Aceptada |
 | [DEC-026](#dec-026--el-volumen-del-tracto-corticoespinal-no-se-ajusta-por-icv) | El volumen del tracto corticoespinal no se ajusta por ICV | Metodología | Aceptada |
 | [DEC-027](#dec-027--nomenclatura-unificada-de-los-tractos-de-tracula) | Nomenclatura unificada de los tractos de Tracula | Datos | Propuesta (confirmar SLF izquierdo con la Fundación) |
+| [DEC-028](#dec-028--modelos-avanzados-con-validación-anidada-sin-mejora-frente-al-baseline-ni-al-azar) | Modelos avanzados con validación anidada: sin mejora frente al baseline ni al azar | Metodología | Aceptada |
 
 ---
 
@@ -641,3 +642,23 @@ En `NEO_ECN` y `NEO_ventilacion`, el valor −1 **no es un código de faltante**
 - *Renombrar a nombres nuevos más legibles*: rompería los nombres que ya usan los notebooks y el diccionario de la Fundación.
 
 **Consecuencias.** Con la corrección, cada uno de los 18 tractos tiene exactamente 18 métricas (prueba de integración en `tests/test_load_data.py`). `data/interim/` conserva todas las columnas, pero cambia el nombre de 44 columnas de tractos, lo que matiza DEC-004. El corticoespinal no cambia, así que `hw_motor.parquet` no se ve afectado. La asignación del SLF izquierdo es una inferencia y debe confirmarse con la Fundación; si resulta errada, basta con corregir `TRACT_EXACT_RENAMES` y `TRACT_PREFIX_RENAMES`.
+
+---
+
+## DEC-028 — Modelos avanzados con validación anidada: sin mejora frente al baseline ni al azar
+
+- **Fecha:** 2026-11-08 · **Autor:** María Paula Saa · **Estado:** Aceptada
+- **Contexto / issue:** rama `4.2-ml-feature-selection-y-tuning-de-modelos` (issue #28)
+
+**Decisión.** Se comparan cuatro modelos con el baseline de DEC-025, con las mismas 19 variables del formulario, la misma etiqueta (`is_resilient`, n = 168) y los mismos folds: regresión logística con penalización elastic net (`enet`), selección de variables con Lasso (`lasso`), selección por importancia de Random Forest (`rf_select`) y gradient boosting (`hgb`, `HistGradientBoostingClassifier`). La evaluación es anidada: validación cruzada externa de 5 folds repetida 3 veces; dentro de cada fold externo, el imputador MICE del 3.1, la selección de variables (las k variables de mayor importancia, con k como hiperparámetro) y la búsqueda de hiperparámetros (validación interna de 3 folds, ROC-AUC) usan solo las filas de entrenamiento externo. La búsqueda interna recibe los datos ya imputados con el imputador ajustado en ese entrenamiento (no se reajusta en cada fold interno); esto solo afecta a la elección de hiperparámetros, no a la estimación externa. El modelo exportado se fija antes de ver los resultados: `enet`, por ser regularizado e interpretable. Se exportan `modelos/advanced.pkl` (escalado y clasificador, sin imputador) y `modelos/advanced_meta.json` (variables, variables retenidas e hiperparámetros elegidos). El código está en `src/models/train_advanced.py`.
+
+**Motivo.** Resultados (ROC-AUC, media ± desviación entre folds externos): baseline 0.531 ± 0.081, `enet` 0.547 ± 0.101, `lasso` 0.554 ± 0.097, `rf_select` 0.554 ± 0.090, `hgb` 0.555 ± 0.054. Con n = 168 (90 positivos y 78 negativos), el margen del 95% del ROC-AUC de un modelo que adivina es ±0.088 alrededor de 0.500, así que los cinco resultados caen dentro del azar. Las diferencias frente al baseline (+0.016 a +0.024) son menores que la variación entre folds y que la diferencia del propio baseline entre DEC-025 (0.518) y esta corrida (0.531), que solo cambió en las particiones. Prueba de permutación sobre el modelo exportado (`enet`, 5 folds sin repetición, 50 permutaciones): ROC-AUC 0.531, p = 0.353, es decir, no se distingue del azar. Con un baseline en azar y n = 168, un modelo "superior" se obtendría por sobreajuste a la validación o por escoger el mejor de varios candidatos, que sesga el resultado hacia arriba.
+
+**Alternativas descartadas.**
+- *Cumplir el criterio "métricas superiores al baseline" al pie de la letra*: con un baseline en azar solo se logra por casualidad o por sobreajuste.
+- *Elegir el modelo exportado por su ROC-AUC*: el mejor de cuatro candidatos es optimista.
+- *Seleccionar variables o ajustar hiperparámetros con todos los datos antes de validar*: infla la métrica.
+- *XGBoost o LightGBM*: agregan una dependencia (`pyproject.toml`, CI y Docker) y, con 168 casos, el riesgo de sobreajuste es mayor; `HistGradientBoostingClassifier` es de la misma familia y no agrega dependencias. Se puede cambiar si el equipo lo exige.
+- *Reducir dimensionalidad con Lasso o Random Forest como paso previo*: con 19 variables hay poco que reducir; se trata como hiperparámetro dentro de la validación.
+
+**Consecuencias.** El criterio "superiores al baseline" del ticket 4.2 no se cumple, y se reporta como hallazgo: ni la selección de variables, ni el ajuste de hiperparámetros, ni el gradient boosting logran predecir la resiliencia con las variables del formulario. Aclara DEC-025: allí el valor ±0.045 es el error estándar del ROC-AUC de un modelo que adivina; el margen del 95% es ±0.088, y la conclusión de que el baseline es equivalente al azar se mantiene. Para el 4.3 (SHAP), `advanced.pkl` es una regresión logística con las mismas columnas que `advanced_meta.json`; como no predice mejor que el azar, sus explicaciones no deben presentarse como explicaciones de una señal real. Mejorar el resultado requiere más información (variables posteriores al primer año o un conjunto ampliado de variables tempranas, por ejemplo el bloque NEO) o más casos, no más complejidad de modelo.
