@@ -12,6 +12,7 @@ from nbclient import NotebookClient
 
 NOTEBOOKS_DIR = Path(__file__).resolve().parents[1] / "notebooks"
 TARGET_NOTEBOOK = NOTEBOOKS_DIR / "02_resilience_phenotype.ipynb"
+HARDWARE_OK_NOTEBOOK = NOTEBOOKS_DIR / "03_grupos_estructuras_hardware_ok.ipynb"
 
 
 def run_notebook(notebook_path: Path, timeout: int = 300) -> None:
@@ -31,6 +32,15 @@ def run_notebook(notebook_path: Path, timeout: int = 300) -> None:
 def test_02_resilience_phenotype_notebook_executes() -> None:
     """Valida que el notebook 02_resilience_phenotype.ipynb corra completamente sin errores."""
     run_notebook(TARGET_NOTEBOOK)
+
+
+@pytest.mark.skipif(
+    not (NOTEBOOKS_DIR.parent / "data" / "features" / "hardware_ok.parquet").exists(),
+    reason="Requiere que hardware_ok.parquet y las cohortes reales estén generadas por el pipeline.",
+)
+def test_03_grupos_estructuras_hardware_ok_notebook_executes() -> None:
+    """Valida que el notebook 03_grupos_estructuras_hardware_ok.ipynb corra sin errores."""
+    run_notebook(HARDWARE_OK_NOTEBOOK)
 
 
 if __name__ == "__main__":

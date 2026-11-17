@@ -1,0 +1,94 @@
+{
+  "primary_shortlist": [
+    "sub_lh_caudate_vol",
+    "sub_rh_caudate_vol",
+    "sub_lh_putamen_vol",
+    "sub_rh_putamen_vol",
+    "sub_lh_pallidum_vol",
+    "sub_rh_pallidum_vol",
+    "ba_lh_ba4a_vol",
+    "ba_rh_ba4a_vol",
+    "ba_lh_ba3b_vol",
+    "ba_rh_ba3b_vol",
+    "ba_lh_ba2_vol",
+    "ba_rh_ba2_vol",
+    "cst_lh_vol",
+    "cst_rh_vol",
+    "cst_lh_fa",
+    "cst_rh_fa",
+    "cst_lh_rd",
+    "cst_rh_rd"
+  ],
+  "sensitivity_vol12_shortlist": [
+    "sub_lh_caudate_vol",
+    "sub_rh_caudate_vol",
+    "sub_lh_putamen_vol",
+    "sub_rh_putamen_vol",
+    "sub_lh_pallidum_vol",
+    "sub_rh_pallidum_vol",
+    "cst_lh_vol",
+    "cst_rh_vol",
+    "ba_lh_ba4a_vol",
+    "ba_rh_ba4a_vol",
+    "ba_lh_ba3b_vol",
+    "ba_rh_ba3b_vol"
+  ],
+  "threshold_sd_rob": -1.0,
+  "max_impaired_count": 2,
+  "nhpt_bimanual_concordance": {
+    "n_both_hands_total": 483,
+    "pearson_r_total": 0.6556945623507716,
+    "pearson_p_total": 1.10281600225469e-60,
+    "spearman_rho_total": 0.49487565892439256,
+    "pearson_r_fit_sample": 0.7424232085238671,
+    "pearson_p_fit_sample": 7.233555030474282e-38,
+    "mean_diff_mnd_minus_md_s": 1.7204140786749482
+  },
+  "calibration_candidates": [
+    {
+      "criterion": "hardware_ok_main_3domain18_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 109,
+      "pct_fit_ok": 52.15311004784689,
+      "n_qc_total": 168,
+      "n_qc_ok": 94,
+      "pct_qc_ok": 55.952380952380956
+    },
+    {
+      "criterion": "hardware_ok_no_rciu_3domain18_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 99,
+      "pct_fit_ok": 47.368421052631575,
+      "n_qc_total": 168,
+      "n_qc_ok": 87,
+      "pct_qc_ok": 51.78571428571429
+    },
+    {
+      "criterion": "hardware_ok_vol12_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 93,
+      "pct_fit_ok": 44.49760765550239,
+      "n_qc_total": 168,
+      "n_qc_ok": 79,
+      "pct_qc_ok": 47.023809523809526
+    },
+    {
+      "criterion": "hardware_ok_count_le2_of_12",
+      "n_fit_total": 209,
+      "n_fit_ok": 93,
+      "pct_fit_ok": 44.49760765550239,
+      "n_qc_total": 168,
+      "n_qc_ok": 78,
+      "pct_qc_ok": 46.42857142857143
+    },
+    {
+      "criterion": "rejected_strict_intersection_0_of_12",
+      "n_fit_total": 209,
+      "n_fit_ok": 32,
+      "pct_fit_ok": 15.311004784688995,
+      "n_qc_total": 168,
+      "n_qc_ok": 26,
+      "pct_qc_ok": 15.476190476190476
+    }
+  ]
+}
