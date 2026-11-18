@@ -97,3 +97,10 @@ modelos/*
 
 # Temporary local copy of thesis/source material; never commit to Git.
 data/raw/Tesis/
+
+# Reportes locales generados por notebooks; se permite versionar únicamente los
+# artefactos agregados de hardware_ok validados sin filas de pacientes (DEC-001/005).
+reports/*
+!reports/hardware_ok/
+!reports/hardware_ok/**
+

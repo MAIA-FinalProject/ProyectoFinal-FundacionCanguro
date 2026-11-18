@@ -59,7 +59,10 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-025](#dec-025--modelo-base-de-resiliencia-regresión-logística-regularizada-resultado-equivalente-al-azar) | Modelo base de resiliencia: regresión logística regularizada, resultado equivalente al azar | Metodología | Aceptada |
 | [DEC-026](#dec-026--el-volumen-del-tracto-corticoespinal-no-se-ajusta-por-icv) | El volumen del tracto corticoespinal no se ajusta por ICV | Metodología | Aceptada |
 | [DEC-027](#dec-027--nomenclatura-unificada-de-los-tractos-de-tracula) | Nomenclatura unificada de los tractos de Tracula | Datos | Propuesta (confirmar SLF izquierdo con la Fundación) |
-| [DEC-028](#dec-028--modelos-avanzados-con-validación-anidada-sin-mejora-frente-al-baseline-ni-al-azar) | Modelos avanzados con validación anidada: sin mejora frente al baseline ni al azar | Metodología | Aceptada |
+| [DEC-028](#dec-028--modelos-avanzados-con-validación-anidada-sin-mejora-frente-al-azar) | Modelos avanzados con validación anidada: sin mejora frente al baseline ni al azar | Metodología | Aceptada |
+| [DEC-029](#dec-029--definición-operativa-de-grupos-comparables-y-retención-de-rciu-fenton-en-la-referencia) | Definición operativa de grupos comparables y retención de RCIU-Fenton en la referencia | Metodología | Aceptada |
+| [DEC-030](#dec-030--selección-de-estructuras-motoras-término-vs-prematuros-y-paradoja-del-dti-en-el-tracto-corticoespinal) | Selección de estructuras motoras Término vs. Prematuros y paradoja del DTI en el tracto corticoespinal | Metodología | Aceptada |
+| [DEC-031](#dec-031--definición-matemática-normativa-y-calibración-del-umbral-de-hardware_ok) | Definición matemática normativa y calibración del umbral de `hardware_ok` | Metodología | Aceptada |
 
 ---
 
@@ -662,3 +665,78 @@ En `NEO_ECN` y `NEO_ventilacion`, el valor −1 **no es un código de faltante**
 - *Reducir dimensionalidad con Lasso o Random Forest como paso previo*: con 19 variables hay poco que reducir; se trata como hiperparámetro dentro de la validación.
 
 **Consecuencias.** El criterio "superiores al baseline" del ticket 4.2 no se cumple, y se reporta como hallazgo: ni la selección de variables, ni el ajuste de hiperparámetros, ni el gradient boosting logran predecir la resiliencia con las variables del formulario. Aclara DEC-025: allí el valor ±0.045 es el error estándar del ROC-AUC de un modelo que adivina; el margen del 95% es ±0.088, y la conclusión de que el baseline es equivalente al azar se mantiene. Para el 4.3 (SHAP), `advanced.pkl` es una regresión logística con las mismas columnas que `advanced_meta.json`; como no predice mejor que el azar, sus explicaciones no deben presentarse como explicaciones de una señal real. Mejorar el resultado requiere más información (variables posteriores al primer año o un conjunto ampliado de variables tempranas, por ejemplo el bloque NEO) o más casos, no más complejidad de modelo.
+
+---
+
+## DEC-029 — Definición operativa de grupos comparables y retención de RCIU-Fenton en la referencia
+
+- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada
+- **Contexto / issue:** issue #31 (ticket 4.5); consolida DEC-003 y DEC-007
+
+**Decisión.** Para el contraste Término vs. Prematuros y la estandarización normativa de `hardware_ok` (`src/features/build_hardware_ok.py`), se definen dos cohortes comparables evaluadas a los 20 años:
+1. **Referencia a Término (`ubicac == 3`):** Se conserva íntegra la cohorte nacida a término con edad gestacional $\ge 37$ semanas ($37\text{–}41$ sem) y peso al nacer $\ge 2500\text{ g}$ ($2500\text{–}3806\text{ g}$): $n = 49$ con prueba NHPT bimanual completa y $n = 37$ con resonancia magnética estructural y DTI ($n = 36$ con RM + DTI + NHPT y $n = 32$ con `qc_ok == True`). Los 12 sujetos marcados con `rciu_fenton_ref == True` (9 con RM) se mantienen en el ancla normativa principal y se ofrece `hardware_ok_no_rciu` ($n = 28$ con RM) como análisis de sensibilidad explícito.
+2. **Prematuros `< 1801 g` (`ubicac` en `{1, 2}` y `fit_sample == True`):** Los $n = 209$ participantes del ECA (112 Canguro, 97 Tradicional) con peso al nacer $< 1801\text{ g}$, RM estructural/DTI y NHPT en ambas manos, evaluando como sensibilidad de calidad de imagen la submuestra `qc_ok == True` ($n = 168$; 94 Canguro, 74 Tradicional).
+
+**Motivo.**
+- *Impacto empírico de RCIU-Fenton en la referencia:* La comparación interna entre los controles a término sin RCIU-Fenton ($n = 38$; 28 con RM) y los 12 reclasificados retrospectivamente por la curva de Fenton (2013) confirma que tienen idéntica edad gestacional ($39.08$ vs. $39.00$ semanas, $p_{\text{Welch}} = 0.796$) y **no presentan deterioro motor ni reducción craneal**: en NHPT bimanual promedian $18.86 \pm 1.55\text{ s}$ (sin RCIU) frente a $18.44 \pm 1.63\text{ s}$ (con RCIU, $p_{\text{Welch}} = 0.436$, $p_{\text{MWU}} = 0.340$), y en volumen intracraneal (`icv`) promedian $1\,277.0\text{ cm}^3$ frente a $1\,245.7\text{ cm}^3$ ($p_{\text{Welch}} = 0.599$). Además, el vector de tamaños de efecto ($g$ de Hedges) de las 80 ROIs motoras entre prematuros y la referencia completa ($n = 37$) vs. la referencia sin RCIU ($n = 28$) presenta una correlación de $r = 0.985$. Excluirlos del análisis principal reduciría en un $24\%$ el tamaño muestral de la referencia con RM sin ganar pureza normativa.
+- *Estandarización del NHPT contra la referencia local vs. Mathiowetz et al. (1985):* Al reconstruir los tiempos de mano derecha e izquierda mediante `NHPT_ManoDominante` (`1` = derecha, `3` = izquierda) y compararlos contra las normas estadounidenses por sexo de Mathiowetz et al. (1985, Tablas 3 y 4, 20–24 años: hombres derecha $16.1 \pm 1.9\text{ s}$, izquierda $16.8 \pm 2.2\text{ s}$; mujeres derecha $15.8 \pm 2.1\text{ s}$, izquierda $17.2 \pm 2.4\text{ s}$), nuestra referencia sana a término ($n = 49$) promedia $17.81 \pm 1.51\text{ s}$ en mano derecha ($Z_{\text{Math}} = +0.93\text{ DE}$), $19.71 \pm 2.59\text{ s}$ en mano izquierda ($Z_{\text{Math}} = +1.17\text{ DE}$) y $18.76 \pm 1.56\text{ s}$ en el promedio bimanual ($Z_{\text{Math}} = +1.05\text{ DE}$). En consecuencia, el **$85.7\%$ ($42/49$) en mano derecha, el $87.8\%$ ($43/49$) en mano izquierda y el $98.0\%$ ($48/49$) en el promedio bimanual** de los controles sanos a término son más lentos que la media de Mathiowetz (1985). Por ello, `z_nhpt_ref` se estandariza de forma robusta (mediana y $1.4826 \cdot \text{MAD}$, con signo invertido) contra los $n = 49$ controles locales.
+
+**Alternativas descartadas.**
+- *Excluir de forma permanente a los 12 sujetos con `rciu_fenton_ref == True`*: merma la precisión de la mediana y la MAD en la referencia con RM ($n = 28$ en vez de $37$) sin justificación empírica ni clínica.
+- *Estandarizar el NHPT con las medias de Mathiowetz (1985)*: clasificaría como más lentos que la media normativa al $85.7\%\text{–}98.0\%$ de los controles sanos nacidos a término de la misma clínica.
+
+**Consecuencias.** Queda cerrada la propuesta de DEC-003. La Tabla 1 y las distribuciones de NHPT se exportan únicamente en forma agregada en `reports/hardware_ok/tabla1_cohortes.csv` y `reports/hardware_ok/nhpt_por_grupo.csv`.
+
+---
+
+## DEC-030 — Selección de estructuras motoras Término vs. Prematuros y paradoja del DTI en el tracto corticoespinal
+
+- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada
+- **Contexto / issue:** issue #31 (ticket 4.5); aplica DEC-014, DEC-015, DEC-016 y DEC-026
+
+**Decisión.** El contraste anatómico entre Referencia con RM ($n = 37$) y Prematuros (`fit_sample`, $n = 209$) se ejecuta estrictamente sobre el `icv` y las **80 ROIs motoras en valores absolutos** (sin usar `*_icvadj`, en cumplimiento de DEC-016). A partir de los tamaños de efecto ($g$ de Hedges y $\delta$ de Cliff con corrección FDR Benjamini-Hochberg), el respaldo de la literatura (Volpe, 2009; Charpak et al., 2017; Wilson et al., 2017; Groeschel et al., 2014) y la revisión clínica del Dr. Tiberio, se fija como **lista corta principal de 12 volúmenes motores (`SHORTLIST_CORE_VOL_12`, todas con signo `+1`)** para definir el puntaje normativo `hw_norm_score`:
+1. **Ganglios basales (6 volúmenes, signo `+1`):** `sub_{lh,rh}_{caudate,putamen,pallidum}_vol`.
+2. **Tracto corticoespinal (2 volúmenes, signo `+1`):** `cst_{lh,rh}_vol`.
+3. **Corteza motora y somatosensorial primaria M1/S1 (4 volúmenes, signo `+1`):** `ba_{lh,rh}_{ba4a,ba3b}_vol`.
+
+Como análisis de sensibilidad multimétrico (`SHORTLIST_3DOMAIN_18`, 18 métricas), se añade el volumen de `BA2` (`ba_{lh,rh}_ba2_vol`, `+1`) y la microestructura del tracto corticoespinal (`cst_{lh,rh}_fa` con `+1` y `cst_{lh,rh}_rd` con `-1`), conservando asimismo FA y RD en el contraste de las 80 ROIs y en el análisis de asociación con el NHPT.
+
+**Motivo.**
+- *Reducción volumétrica consistente en los 3 dominios motores:* De las 65 métricas del atlas principal (`icv` + 64 ROIs sin Desikan), 29 superan $q_{\text{FDR}} < 0.05$. Los prematuros presentan menor `icv` ($g = -0.56, q = 0.013$), fuerte reducción volumétrica del tracto corticoespinal (`cst_rh_vol` $g = -0.82, \delta = -0.48, q = 0.00016$; `cst_lh_vol` $g = -0.52, q = 0.040$), reducción en los ganglios basales (`sub_rh_pallidum_vol` $g = -0.77$, `sub_lh_caudate_vol` $g = -0.75$, `sub_rh_caudate_vol` $g = -0.70$, `sub_rh_putamen_vol` $g = -0.63$, `sub_lh_putamen_vol` $g = -0.59$; todos $q < 0.008$) y reducción en M1/S1 (`ba_lh_ba3b_vol` $g = -0.48$, `ba_rh_ba4a_vol` $g = -0.45$, `ba_lh_ba4a_vol` $g = -0.40$, `ba_rh_ba2_vol` $g = -0.36$), junto con alteración generalizada del plegamiento cortical (`ba_*_curv` mayor en prematuros, $g = +0.36\text{ a }+0.91$).
+- *La paradoja del DTI en el tracto corticoespinal y por qué `SHORTLIST_CORE_VOL_12` es la definición principal:* Mientras que el volumen del tracto corticoespinal (`cst_*_vol`) está severamente disminuido en los prematuros, la anisotropía fraccional media ponderada (`cst_lh_fa` $g = +0.45, q = 0.0066$; en `qc_ok` $g = +0.71$) es **mayor** y la difusividad radial (`cst_lh_rd` $g = -0.37, \delta = -0.40, q_{\text{MWU}} = 0.001$) es **menor** en prematuros que en nacidos a término. Como advirtió el Dr. Tiberio y documenta la literatura de neuroimagen en prematuros (Groeschel et al., 2014; Volpe, 2009), este fenómeno se debe a la pérdida o disgenesia de fibras asociativas cruzadas (p. ej. fascículo longitudinal superior y fibras corticopontinas/talamocorticales que intersectan la corona radiada): en un vóxel con menos fibras cruzadas, el tensor de difusión aparenta ser más direccional (mayor FA y menor RD) aunque el haz sea macroscópicamente más delgado (menor `cst_*_vol`). Por consiguiente, **incluir FA con signo `+1` y RD con signo `-1` en un índice anclado a la referencia a término infla artificialmente el puntaje normativo de los prematuros** (subiendo la tasa de `hardware_ok` de $44.5\%$ a $52.2\%$). Adoptar `SHORTLIST_CORE_VOL_12` ($r = -0.264, p = 0.0001$ con `nhpt_mean`) como definición principal garantiza que `hardware_ok` sea unidireccional y libre del artefacto de fibras cruzadas frente a término, manteniendo `SHORTLIST_3DOMAIN_18` ($r = -0.289, p = 2.2 \times 10^{-5}$) como sensibilidad exportada (`hardware_ok_3domain18`).
+
+**Alternativas descartadas.**
+- *Usar las columnas `*_icvadj` en el contraste Término vs. Prematuros*: viola DEC-016 y anula artificialmente las diferencias de volumen entre prematuros y nacidos a término.
+- *Usar `SHORTLIST_3DOMAIN_18` como definición principal anclada a término*: mezcla 14 volúmenes reducidos en prematuros con 4 métricas DTI (`cst_*_fa`, `cst_*_rd`) desplazadas en sentido opuesto respecto a la referencia por pérdida de fibras cruzadas.
+- *Incluir la curvatura cortical (`ba_*_curv`) en el índice principal*: aunque se asocia con lentitud en NHPT ($r = +0.22\text{ a }+0.34$), depende fuertemente del registro esférico de FreeSurfer en cerebros displásicos (DEC-014/017); se reporta en la tabla de asociación pero se mantiene fuera del score normativo principal.
+
+**Consecuencias.** Los contrastes completos de las 80 ROIs absolutas + `icv` y las asociaciones intra-prematuros (en escala absoluta e `*_icvadj`, ajustadas por `BIRTH_sexo5`) se exportan en `reports/hardware_ok/contraste_80_rois_absolutas.csv` y `reports/hardware_ok/asociacion_estructura_nhpt.csv`.
+
+---
+
+## DEC-031 — Definición matemática normativa y calibración del umbral de `hardware_ok`
+
+- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada
+- **Contexto / issue:** issue #31 (ticket 4.5); habilita el ticket 5.2 (issue #33)
+
+**Decisión.** Se define el estado de preservación estructural motora (`hardware_ok`) sobre los 12 volúmenes motores de `SHORTLIST_CORE_VOL_12`, anclado directamente a la distribución del grupo de referencia a término con RM ($\mathcal{R}$, $n = 37$):
+1. Cada métrica $k \in \mathcal{S}$ de la lista corta se estandariza de forma robusta respecto a la mediana y la MAD escalada ($1.4826 \cdot \text{MAD}$) de $\mathcal{R}$: $z_{i,k}^{(\text{ref})} = s_k \cdot (x_{i,k} - \text{mediana}_{\mathcal{R}}) / (1.4826 \cdot \text{MAD}_{\mathcal{R}})$.
+2. El promedio por sujeto $\bar{z}_i^{(\text{ref})} = \frac{1}{K}\sum_{k=1}^K z_{i,k}^{(\text{ref})}$ se re-estandariza respecto a la mediana y MAD escalada de $\bar{z}^{(\text{ref})}$ en $\mathcal{R}$, obteniendo `hw_norm_score` (cuya mediana es exactamente $0.0$ y cuya desviación estándar robusta es exactamente $1.0$ en los controles a término).
+3. La etiqueta binaria principal se define con el umbral normativo clínico **`hardware_ok = (hw_norm_score >= -1.0)`** ("estructura motora volumétrica a no más de $1.0\text{ DE}_{\text{rob}}$ por debajo de la norma a término"), preservando `<NA>` (dtype booleano nullable) si algún componente falta.
+4. `src/features/build_hardware_ok.py` exporta `data/features/hardware_ok.parquet` para los **$n = 209$ sujetos de `fit_sample`** con 18 columnas, incluyendo `hw_norm_score`, `hardware_ok`, la variante con filtro de calidad `hardware_ok_qc` ($n = 168$ válidos con `qc_ok == True` y `<NA>` en los 41 restantes), la variante sin RCIU-Fenton `hardware_ok_no_rciu` ($n_{\mathcal{R}} = 28$), la variante con normas estratificadas por sexo `hardware_ok_sex` ($n_{\mathcal{R}} = 19$ mujeres y $18$ hombres), la variante multimétrica de 18 variables `hardware_ok_3domain18` y la variante por conteo `hardware_ok_count` ($\le 2$ de las 12 estructuras volumétricas con $z_{i,k}^{(\text{ref})} < -1.0$).
+
+**Motivo.**
+- *Interpretabilidad clínica y anclaje externo:* A diferencia del residual de regresión (`DEC-020`), que depende de la recta ajustada dentro de los mismos prematuros, `hardware_ok` mide directamente si la arquitectura cerebral motora del joven prematuro se encuentra dentro del rango normal de sus pares nacidos a término ($\ge -1.0\text{ DE}_{\text{rob}}$, equivalente al percentil $\sim 16$ teórico de una distribución normal).
+- *Balance de clases viable para el Ticket #33 (`5.2`):* La calibración empírica en `fit_sample` ($n = 209$) y `qc_ok` ($n = 168$) demuestra que el corte $\ge -1.0\text{ DE}_{\text{rob}}$ produce particiones balanceadas y estables en todas las variantes:
+  - `hardware_ok` / `hardware_ok_vol12` (principal, 12 volúmenes puros): **93 / 209 ($44.5\%$)** en `fit_sample` y **79 / 168 ($47.0\%$)** en `qc_ok`.
+  - `hardware_ok_no_rciu` (12 volúmenes, referencia sin RCIU-Fenton $n = 28$): **98 / 209 ($46.9\%$)** en `fit_sample` y **84 / 168 ($50.0\%$)** en `qc_ok`.
+  - `hardware_ok_sex` (12 volúmenes, referencia estratificada por `BIRTH_sexo5`): **91 / 209 ($43.5\%$)** en `fit_sample` y **75 / 168 ($44.6\%$)** en `qc_ok`.
+  - `hardware_ok_3domain18` (sensibilidad 18 métricas, 3 dominios incl. FA/RD): **109 / 209 ($52.2\%$)** en `fit_sample` y **94 / 168 ($56.0\%$)** en `qc_ok`.
+  - `hardware_ok_count` ($\le 2$ de 12 volúmenes $< -1.0\text{ DE}_{\text{rob}}$): **93 / 209 ($44.5\%$)** en `fit_sample` y **78 / 168 ($46.4\%$)** en `qc_ok`.
+
+**Alternativas descartadas.**
+- *Intersección estricta de umbrales individuales ($\forall k, z_{i,k}^{(\text{ref})} \ge -1.0$)*: por probabilidad conjunta de 12 variables correlacionadas, deja solo **32 / 209 ($15.3\%$)** en prematuros (e incluso en la referencia sana a término solo el $43\%$ cumple 12/12 simultáneamente), induciendo un desbalance artificial severo.
+- *No re-estandarizar el promedio $\bar{z}_i^{(\text{ref})}$*: el promedio de $K$ puntajes $z$ no perfectamente correlacionados tiene desviación estándar $\approx 0.50 < 1.0$, por lo que aplicar un corte crudo de $-1.0$ equivaldría en realidad a $\approx -2.0\text{ DE}$ de la referencia.
+
+**Consecuencias.** El Ticket #33 (`src/models/train_incremental.py`) dispone de un archivo limpio y tipado (`data/features/hardware_ok.parquet`) que permite entrenar modelos sobre $n = 209$ (`hardware_ok`) o $n = 168$ (`hardware_ok_qc`) y contrastar las sensibilidades sin RCIU (`hardware_ok_no_rciu`), estratificada por sexo (`hardware_ok_sex`), multimétrica (`hardware_ok_3domain18`) y por conteo (`hardware_ok_count`).
+
