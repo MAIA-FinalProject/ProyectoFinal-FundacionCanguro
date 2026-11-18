@@ -10,7 +10,8 @@ Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico
      (``fit_sample == True``, DEC-007, ``n = 209``; y submuestra ``qc_ok == True``, ``n = 168``).
    - Caracteriza el NHPT (``NHPT_promedioMD``, ``NHPT_promedioMND`` y ``nhpt_mean``), su
      concordancia bimanual, la estandarización contra la referencia local (``z_nhpt_ref``) y
-     el contraste frente a las normas de adultos jóvenes de Mathiowetz et al. (1985).
+     el contraste lateralizado (mano derecha/izquierda reconstruida con ``NHPT_ManoDominante``)
+     frente a las normas por sexo de Mathiowetz et al. (1985) para adultos de 20–24 años.
 
 2. **Contraste anatómico Término vs. Prematuros en valores absolutos (DEC-016, DEC-030):**
    - Compara ``icv`` y las 80 ROIs motoras en valores absolutos de ``hw_motor.parquet``
@@ -24,9 +25,12 @@ Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico
    - En prematuros, cuantifica la asociación entre las estructuras motoras seleccionadas
      (tanto en valores absolutos como ajustados por ICV ``*_icvadj``) y ``nhpt_mean``
      mediante correlación parcial y regresión lineal/Huber ajustada por ``BIRTH_sexo5``.
-   - Define ``hw_norm_score`` anclado a la mediana y MAD escalada del grupo de referencia a
-     término y binariza ``hardware_ok`` (``hw_norm_score >= -1.0``), verificando el balance
-     de clases en prematuros para el entrenamiento incremental del Ticket #33 (5.2).
+   - Define ``hw_norm_score`` y la etiqueta principal ``hardware_ok`` (``hw_norm_score >= -1.0``)
+     sobre los 12 volúmenes motores (``SHORTLIST_CORE_VOL_12``) anclados a la mediana y MAD
+     escalada del grupo de referencia a término (evitando la paradoja direccional del DTI por
+     pérdida de fibras cruzadas en FA/RD), y exporta las sensibilidades ``hardware_ok_qc``,
+     ``hardware_ok_no_rciu``, ``hardware_ok_sex`` (normas estratificadas por sexo),
+     ``hardware_ok_3domain18`` (18 métricas incluyendo FA y RD) y ``hardware_ok_count``.
 
 4. **Salidas (sin filas individuales en reportes, DEC-001 / DEC-005):**
    - ``data/features/hardware_ok.parquet``: features por sujeto para el Ticket #33.
@@ -68,6 +72,7 @@ DEFAULT_MAX_IMPAIRED_COUNT = 2  # máximo de estructuras < -1.0 DE en regla por 
 
 NHPT_COLS = ("NHPT_promedioMD", "NHPT_promedioMND")
 HANDEDNESS_COL = "NHPT_ManoDominante"
+VALID_SEX_CODES = (1, 2)  # 1 = Femenino, 2 = Masculino
 
 # Variables de la Tabla 1 Descriptiva (bloques BIRTH y SCB).
 TABLE1_CONT_COLS: tuple[str, ...] = (
@@ -89,38 +94,30 @@ TABLE1_CAT_COLS: tuple[str, ...] = (
     "SCB_nivp2",
 )
 
-# Normas de Mathiowetz et al. (1985) para adultos jóvenes de 20-24 años (en segundos).
-# En el codebook SPSS: BIRTH_sexo5 -> 1 = Femenino, 2 = Masculino.
-MATHIOWETZ_NORMS_20_24: dict[str, dict[str, float]] = {
-    "female_1": {"md_mean": 15.9, "md_sd": 1.5, "mnd_mean": 16.9, "mnd_sd": 1.4},
-    "male_2": {"md_mean": 16.1, "md_sd": 1.5, "mnd_mean": 17.0, "mnd_sd": 1.8},
-    "pooled": {"md_mean": 16.0, "md_sd": 1.5, "mnd_mean": 16.95, "mnd_sd": 1.6},
+# Normas exactas de Mathiowetz et al. (1985), Tablas 3 y 4, para adultos jóvenes de
+# 20-24 años (en segundos), reportadas para mano derecha y mano izquierda según sexo:
+# - Mujeres (BIRTH_sexo5 == 1): Derecha = 15.8 ± 2.1 s; Izquierda = 17.2 ± 2.4 s
+# - Hombres (BIRTH_sexo5 == 2): Derecha = 16.1 ± 1.9 s; Izquierda = 16.8 ± 2.2 s
+MATHIOWETZ_NORMS_20_24: dict[int, dict[str, float]] = {
+    1: {
+        "right_mean": 15.8,
+        "right_sd": 2.1,
+        "left_mean": 17.2,
+        "left_sd": 2.4,
+        "bimanual_mean": 16.50,
+    },
+    2: {
+        "right_mean": 16.1,
+        "right_sd": 1.9,
+        "left_mean": 16.8,
+        "left_sd": 2.2,
+        "bimanual_mean": 16.45,
+    },
 }
 
-# Lista corta principal de 3 dominios motores (DEC-030): 18 métricas con diferencias
-# Término vs. Prematuros y dirección biológica inequívoca (+1: mayor = más preservado).
-SHORTLIST_3DOMAIN_18: dict[str, int] = {
-    "sub_lh_caudate_vol": 1,
-    "sub_rh_caudate_vol": 1,
-    "sub_lh_putamen_vol": 1,
-    "sub_rh_putamen_vol": 1,
-    "sub_lh_pallidum_vol": 1,
-    "sub_rh_pallidum_vol": 1,
-    "ba_lh_ba4a_vol": 1,
-    "ba_rh_ba4a_vol": 1,
-    "ba_lh_ba3b_vol": 1,
-    "ba_rh_ba3b_vol": 1,
-    "ba_lh_ba2_vol": 1,
-    "ba_rh_ba2_vol": 1,
-    "cst_lh_vol": 1,
-    "cst_rh_vol": 1,
-    "cst_lh_fa": 1,
-    "cst_rh_fa": 1,
-    "cst_lh_rd": -1,
-    "cst_rh_rd": -1,
-}
-
-# Lista corta de sensibilidad volumétrica pura (12 volúmenes motores reducidos en prematuros).
+# Lista corta principal (DEC-030 / DEC-031): 12 volúmenes motores reducidos en prematuros
+# frente a término, todos con orientación biológica unidireccional (+1: mayor = más
+# preservado), libre del sesgo de fibras cruzadas del DTI en FA/RD.
 SHORTLIST_CORE_VOL_12: dict[str, int] = {
     "sub_lh_caudate_vol": 1,
     "sub_rh_caudate_vol": 1,
@@ -136,6 +133,18 @@ SHORTLIST_CORE_VOL_12: dict[str, int] = {
     "ba_rh_ba3b_vol": 1,
 }
 
+# Lista corta de sensibilidad de 3 dominios motores (18 métricas: incluye BA2 y FA/RD del
+# tracto corticoespinal).
+SHORTLIST_3DOMAIN_18: dict[str, int] = {
+    **SHORTLIST_CORE_VOL_12,
+    "ba_lh_ba2_vol": 1,
+    "ba_rh_ba2_vol": 1,
+    "cst_lh_fa": 1,
+    "cst_rh_fa": 1,
+    "cst_lh_rd": -1,
+    "cst_rh_rd": -1,
+}
+
 OUTPUT_COLS: list[str] = [
     "code",
     "ubicac",
@@ -143,11 +152,15 @@ OUTPUT_COLS: list[str] = [
     "hw_norm_score",
     "hw_norm_score_vol12",
     "hw_norm_score_no_rciu",
+    "hw_norm_score_sex",
+    "hw_norm_score_3domain18",
     "n_impaired_structures",
     "hardware_ok",
     "hardware_ok_qc",
     "hardware_ok_no_rciu",
+    "hardware_ok_sex",
     "hardware_ok_vol12",
+    "hardware_ok_3domain18",
     "hardware_ok_count",
     "nhpt_mean",
     "z_nhpt_ref",
@@ -155,7 +168,7 @@ OUTPUT_COLS: list[str] = [
 
 
 # --------------------------------------------------------------------------- #
-# Utilidades estadísticas
+# Utilidades estadísticas y de validación
 # --------------------------------------------------------------------------- #
 def bh_fdr(pvals: Sequence[float] | np.ndarray) -> np.ndarray:
     """Ajusta valores p por tasa de falsos descubrimientos (Benjamini-Hochberg)."""
@@ -215,7 +228,6 @@ def cliffs_delta_with_ci(
     dom_mat = np.sign(diff)
     delta = float(np.mean(dom_mat))
 
-    # Varianza asintótica de Cliff (1993) acotada para muestras finitas.
     d_i = np.mean(dom_mat, axis=1)
     d_j = np.mean(dom_mat, axis=0)
     s_i2 = float(np.sum((d_i - delta) ** 2)) / max(nx - 1, 1)
@@ -231,14 +243,37 @@ def cliffs_delta_with_ci(
 def _robust_standardize(values: pd.Series, ref_values: pd.Series) -> pd.Series:
     """Estandariza una serie respecto a la mediana y MAD escalada de ref_values."""
     clean_ref = ref_values.dropna()
-    if clean_ref.empty:
-        raise ValueError(f"Referencia vacía al estandarizar '{values.name}'.")
+    if len(clean_ref) < 2:
+        raise ValueError(
+            f"Referencia insuficiente (n={len(clean_ref)}) al estandarizar '{values.name}'."
+        )
     median = float(clean_ref.median())
     mad = float((clean_ref - median).abs().median())
     scale = MAD_SCALE_FACTOR * mad
     if scale <= 0 or np.isnan(scale):
         raise ValueError(f"Escala MAD nula al estandarizar '{values.name}'.")
     return (values - median) / scale
+
+
+def _score_to_nullable_bool(score: pd.Series, threshold: float) -> pd.Series:
+    """Convierte un score continuo en etiqueta booleana nullable preservando <NA>."""
+    out = pd.Series(pd.NA, index=score.index, dtype="boolean")
+    valid = score.notna()
+    out.loc[valid] = score.loc[valid].ge(threshold).to_numpy(dtype=bool)
+    return out
+
+
+def _validate_sex_series(sex_series: pd.Series, context: str) -> pd.Series:
+    """Valida que BIRTH_sexo5 no tenga nulos ni valores fuera de {1, 2}."""
+    sex_num = pd.to_numeric(sex_series, errors="coerce")
+    invalid = sex_num.isna() | (~sex_num.isin(VALID_SEX_CODES))
+    if invalid.any():
+        bad_vals = sex_series.loc[invalid].unique().tolist()
+        raise ValueError(
+            f"BIRTH_sexo5 contiene {int(invalid.sum())} valores nulos o inválidos "
+            f"en {context}: {bad_vals}. Se esperan códigos en {VALID_SEX_CODES}."
+        )
+    return sex_num.astype(int)
 
 
 # --------------------------------------------------------------------------- #
@@ -279,11 +314,10 @@ def load_inputs(
                 axis=1,
             )
         else:
-            rciu_bool = (
-                pd.to_numeric(part["rciu_fenton_ref"].astype(str), errors="coerce")
-                .fillna(0)
-                .eq(1)
-                | part["rciu_fenton_ref"].astype(str).str.lower().eq("true")
+            rciu_bool = pd.to_numeric(
+                part["rciu_fenton_ref"].astype(str), errors="coerce"
+            ).fillna(0).eq(1) | part["rciu_fenton_ref"].astype(str).str.lower().eq(
+                "true"
             )
             part = part.copy()
             part["rciu_fenton_ref"] = rciu_bool
@@ -304,7 +338,14 @@ def build_table1_summary(
     avail_cont = [c for c in TABLE1_CONT_COLS if c in interim_df.columns]
     avail_cat = [c for c in TABLE1_CAT_COLS if c in interim_df.columns]
 
-    sub_cols = ["code", "ubicac", "lessthan1801g", "rciu_fenton_ref", *avail_cont, *avail_cat]
+    sub_cols = [
+        "code",
+        "ubicac",
+        "lessthan1801g",
+        "rciu_fenton_ref",
+        *avail_cont,
+        *avail_cat,
+    ]
     base = interim_df[list(dict.fromkeys(sub_cols))].copy()
     for col in [*avail_cont, *avail_cat]:
         base[col] = pd.to_numeric(base[col], errors="coerce")
@@ -347,7 +388,9 @@ def build_table1_summary(
                 "kind": "continuous",
                 "n_ref_mri": len(y_ref),
                 "ref_mri_mean_or_pct": float(np.mean(y_ref)) if len(y_ref) else np.nan,
-                "ref_mri_sd": float(np.std(y_ref, ddof=1)) if len(y_ref) > 1 else np.nan,
+                "ref_mri_sd": float(np.std(y_ref, ddof=1))
+                if len(y_ref) > 1
+                else np.nan,
                 "ref_mri_median": float(np.median(y_ref)) if len(y_ref) else np.nan,
                 "ref_mri_iqr": (
                     float(np.percentile(y_ref, 75) - np.percentile(y_ref, 25))
@@ -430,16 +473,27 @@ def characterize_nhpt(
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, float]]:
     """Caracteriza el NHPT por grupo, Z-scores contra referencia y normas de Mathiowetz.
 
+    Reconstruye el tiempo de mano derecha (`nhpt_right`) y mano izquierda (`nhpt_left`)
+    a partir de `NHPT_ManoDominante` (`1` = Derecha, `3` = Izquierda; códigos ausentes o
+    distintos quedan como `NaN` para el contraste lateralizado) y calcula los Z-scores
+    contra las normas por sexo de Mathiowetz et al. (1985) para 20–24 años.
+
     Returns:
         Tupla (nhpt_subject_df, nhpt_group_summary_df, concordance_dict).
     """
-    missing = [c for c in ["code", "ubicac", *NHPT_COLS] if c not in interim_df.columns]
+    req_cols = ["code", "ubicac", "BIRTH_sexo5", *NHPT_COLS]
+    missing = [c for c in req_cols if c not in interim_df.columns]
     if missing:
-        raise ValueError(f"Faltan columnas NHPT requeridas: {missing}")
+        raise ValueError(f"Faltan columnas NHPT/sexo requeridas: {missing}")
 
-    cols = ["code", "ubicac", "lessthan1801g", "rciu_fenton_ref", *NHPT_COLS]
-    if "BIRTH_sexo5" in interim_df.columns:
-        cols.append("BIRTH_sexo5")
+    cols = [
+        "code",
+        "ubicac",
+        "lessthan1801g",
+        "rciu_fenton_ref",
+        "BIRTH_sexo5",
+        *NHPT_COLS,
+    ]
     if HANDEDNESS_COL in interim_df.columns:
         cols.append(HANDEDNESS_COL)
 
@@ -447,7 +501,58 @@ def characterize_nhpt(
     for c in NHPT_COLS:
         sub[c] = pd.to_numeric(sub[c], errors="coerce")
 
+    sub["BIRTH_sexo5"] = _validate_sex_series(sub["BIRTH_sexo5"], "characterize_nhpt")
     sub["nhpt_mean"] = (sub["NHPT_promedioMD"] + sub["NHPT_promedioMND"]) / 2.0
+
+    # Reconstrucción de mano derecha e izquierda usando NHPT_ManoDominante (1=Derecha, 3=Izquierda).
+    if HANDEDNESS_COL in sub.columns:
+        dom = pd.to_numeric(sub[HANDEDNESS_COL], errors="coerce")
+        sub["nhpt_right"] = np.where(
+            dom == 1,
+            sub["NHPT_promedioMD"],
+            np.where(dom == 3, sub["NHPT_promedioMND"], np.nan),
+        )
+        sub["nhpt_left"] = np.where(
+            dom == 1,
+            sub["NHPT_promedioMND"],
+            np.where(dom == 3, sub["NHPT_promedioMD"], np.nan),
+        )
+    else:
+        sub["nhpt_right"] = np.nan
+        sub["nhpt_left"] = np.nan
+
+    # Estandarización frente a las normas de Mathiowetz et al. (1985) por sexo y mano
+    # (en segundos: Z > 0 indica más lento que la media estadounidense).
+    sex_arr = sub["BIRTH_sexo5"].to_numpy(dtype=int)
+    math_r_mean = np.where(
+        sex_arr == 1,
+        MATHIOWETZ_NORMS_20_24[1]["right_mean"],
+        MATHIOWETZ_NORMS_20_24[2]["right_mean"],
+    )
+    math_r_sd = np.where(
+        sex_arr == 1,
+        MATHIOWETZ_NORMS_20_24[1]["right_sd"],
+        MATHIOWETZ_NORMS_20_24[2]["right_sd"],
+    )
+    math_l_mean = np.where(
+        sex_arr == 1,
+        MATHIOWETZ_NORMS_20_24[1]["left_mean"],
+        MATHIOWETZ_NORMS_20_24[2]["left_mean"],
+    )
+    math_l_sd = np.where(
+        sex_arr == 1,
+        MATHIOWETZ_NORMS_20_24[1]["left_sd"],
+        MATHIOWETZ_NORMS_20_24[2]["left_sd"],
+    )
+    math_bi_mean = (math_r_mean + math_l_mean) / 2.0
+
+    sub["z_math_right"] = (sub["nhpt_right"] - math_r_mean) / math_r_sd
+    sub["z_math_left"] = (sub["nhpt_left"] - math_l_mean) / math_l_sd
+    sub["z_math_bimanual"] = (sub["z_math_right"] + sub["z_math_left"]) / 2.0
+    sub["diff_math_right_s"] = sub["nhpt_right"] - math_r_mean
+    sub["diff_math_left_s"] = sub["nhpt_left"] - math_l_mean
+    sub["diff_math_bimanual_s"] = sub["nhpt_mean"] - math_bi_mean
+
     sub = sub.merge(
         hw_df[["code", "icv", "fit_sample", "qc_ok"]],
         on="code",
@@ -457,8 +562,8 @@ def characterize_nhpt(
     sub["qc_ok"] = sub["qc_ok"].fillna(False).astype(bool)
 
     ref_nhpt = sub.loc[(sub["ubicac"] == 3) & sub["nhpt_mean"].notna()]
-    if ref_nhpt.empty:
-        raise ValueError("No hay sujetos de referencia con NHPT completo.")
+    if len(ref_nhpt) < 2:
+        raise ValueError("No hay suficientes sujetos de referencia con NHPT completo.")
 
     # Z-scores invertidos respecto a la referencia a término (mayor = mejor desempeño).
     sub["z_md_ref"] = -1.0 * _robust_standardize(
@@ -472,7 +577,7 @@ def characterize_nhpt(
     )
     ref_nhpt = sub.loc[(sub["ubicac"] == 3) & sub["nhpt_mean"].notna()]
 
-    # Concordancia bimanual (MD vs MND) en toda la cohorte con ambas manos y en fit_sample.
+    # Concordancia bimanual (MD vs MND) y resumen frente a Mathiowetz (1985) en referencia.
     both_valid = sub[list(NHPT_COLS)].dropna()
     r_all, p_all = stats.pearsonr(
         both_valid["NHPT_promedioMD"], both_valid["NHPT_promedioMND"]
@@ -486,6 +591,21 @@ def characterize_nhpt(
         if len(fit_valid) > 2
         else (np.nan, np.nan)
     )
+    ref_lat = ref_nhpt.loc[
+        ref_nhpt["nhpt_right"].notna() & ref_nhpt["nhpt_left"].notna()
+    ]
+    pct_ref_slower_r = (
+        float(100.0 * (ref_lat["diff_math_right_s"] > 0).mean())
+        if len(ref_lat)
+        else np.nan
+    )
+    pct_ref_slower_l = (
+        float(100.0 * (ref_lat["diff_math_left_s"] > 0).mean())
+        if len(ref_lat)
+        else np.nan
+    )
+    pct_ref_slower_bi = float(100.0 * (ref_nhpt["diff_math_bimanual_s"] > 0).mean())
+
     concordance = {
         "n_both_hands_total": len(both_valid),
         "pearson_r_total": float(r_all),
@@ -496,6 +616,19 @@ def characterize_nhpt(
         "mean_diff_mnd_minus_md_s": float(
             (both_valid["NHPT_promedioMND"] - both_valid["NHPT_promedioMD"]).mean()
         ),
+        "ref_n_lateralized": len(ref_lat),
+        "ref_z_math_right_mean": (
+            float(ref_lat["z_math_right"].mean()) if len(ref_lat) else np.nan
+        ),
+        "ref_z_math_left_mean": (
+            float(ref_lat["z_math_left"].mean()) if len(ref_lat) else np.nan
+        ),
+        "ref_z_math_bimanual_mean": (
+            float(ref_lat["z_math_bimanual"].mean()) if len(ref_lat) else np.nan
+        ),
+        "ref_pct_slower_than_mathiowetz_right": pct_ref_slower_r,
+        "ref_pct_slower_than_mathiowetz_left": pct_ref_slower_l,
+        "ref_pct_slower_than_mathiowetz_bimanual": pct_ref_slower_bi,
     }
 
     group_defs: dict[str, pd.Series] = {
@@ -515,23 +648,33 @@ def characterize_nhpt(
         "tradicional_fit_sample": sub["fit_sample"] & (sub["ubicac"] == 2),
     }
 
-    math_md = MATHIOWETZ_NORMS_20_24["pooled"]["md_mean"]
-    math_mnd = MATHIOWETZ_NORMS_20_24["pooled"]["mnd_mean"]
-    math_mean = (math_md + math_mnd) / 2.0
-    norm_lookup = {
-        "NHPT_promedioMD": math_md,
-        "NHPT_promedioMND": math_mnd,
-        "nhpt_mean": math_mean,
-        "z_nhpt_ref": 0.0,
+    diff_col_map = {
+        "NHPT_promedioMD": "diff_math_right_s",
+        "NHPT_promedioMND": "diff_math_left_s",
+        "nhpt_right": "diff_math_right_s",
+        "nhpt_left": "diff_math_left_s",
+        "nhpt_mean": "diff_math_bimanual_s",
+    }
+    z_math_col_map = {
+        "nhpt_right": "z_math_right",
+        "nhpt_left": "z_math_left",
+        "nhpt_mean": "z_math_bimanual",
     }
 
     summary_rows: list[dict[str, Any]] = []
     for g_name, mask in group_defs.items():
         g_df = sub.loc[mask]
-        for metric in ("NHPT_promedioMD", "NHPT_promedioMND", "nhpt_mean", "z_nhpt_ref"):
+        for metric in (
+            "NHPT_promedioMD",
+            "NHPT_promedioMND",
+            "nhpt_right",
+            "nhpt_left",
+            "nhpt_mean",
+            "z_nhpt_ref",
+        ):
             vals = g_df[metric].dropna().to_numpy(dtype=float)
             ref_vals = ref_nhpt[metric].dropna().to_numpy(dtype=float)
-            if len(vals) == 0:
+            if len(vals) == 0 or len(ref_vals) == 0:
                 continue
             _d, g, ci_l, ci_h = hedges_g_with_ci(vals, ref_vals)
             cd, cd_l, cd_h = cliffs_delta_with_ci(vals, ref_vals)
@@ -541,6 +684,29 @@ def characterize_nhpt(
                 else (np.nan, np.nan)
             )
             _, p_m = stats.mannwhitneyu(vals, ref_vals, alternative="two-sided")
+
+            diff_col = diff_col_map.get(metric)
+            diff_math = (
+                float(g_df[diff_col].dropna().mean())
+                if diff_col
+                and diff_col in g_df.columns
+                and g_df[diff_col].notna().any()
+                else np.nan
+            )
+            z_m_col = z_math_col_map.get(metric)
+            z_math_val = (
+                float(g_df[z_m_col].dropna().mean())
+                if z_m_col and z_m_col in g_df.columns and g_df[z_m_col].notna().any()
+                else np.nan
+            )
+            pct_slower_math = (
+                float(100.0 * (g_df[diff_col].dropna() > 0).mean())
+                if diff_col
+                and diff_col in g_df.columns
+                and g_df[diff_col].notna().any()
+                else np.nan
+            )
+
             summary_rows.append(
                 {
                     "group": g_name,
@@ -558,11 +724,9 @@ def characterize_nhpt(
                     "cliffs_delta_ci95_high": cd_h,
                     "p_welch_vs_ref": float(p_w),
                     "p_mwu_vs_ref": float(p_m),
-                    "diff_vs_mathiowetz_1985_s": (
-                        float(np.mean(vals) - norm_lookup[metric])
-                        if metric != "z_nhpt_ref"
-                        else np.nan
-                    ),
+                    "diff_vs_mathiowetz_1985_s": diff_math,
+                    "z_vs_mathiowetz_1985": z_math_val,
+                    "pct_slower_than_mathiowetz_1985": pct_slower_math,
                 }
             )
 
@@ -579,13 +743,17 @@ def contrast_rois_term_vs_preterm(
     """Compara icv y las 80 ROIs motoras en valores absolutos (regla DEC-016).
 
     Raises:
-        ValueError: Si falta alguna de las 80 ROIs absolutas o icv en hw_df.
+        ValueError: Si falta alguna de las 80 ROIs absolutas o icv en hw_df, o si la
+            submuestra de referencia sin RCIU-Fenton tiene menos de 2 sujetos.
     """
     abs_rois = ["icv", *list(FEATURE_MAP.keys())]
-    # Regla DEC-016 estricta: ninguna columna *_icvadj puede entrar al contraste Término vs Prematuros.
     assert not any(c.endswith("_icvadj") for c in abs_rois)
 
-    missing = [c for c in ["code", "ubicac", "fit_sample", "qc_ok", *abs_rois] if c not in hw_df.columns]
+    missing = [
+        c
+        for c in ["code", "ubicac", "fit_sample", "qc_ok", *abs_rois]
+        if c not in hw_df.columns
+    ]
     if missing:
         raise ValueError(f"Faltan columnas absolutas en hw_motor: {missing}")
 
@@ -597,6 +765,11 @@ def contrast_rois_term_vs_preterm(
     pre_mask = merged["fit_sample"].eq(True)
     qc_mask = merged["qc_ok"].eq(True)
     no_rciu_mask = ~merged["rciu_fenton_ref"]
+
+    if int((ref_mask & no_rciu_mask).sum()) < 2:
+        raise ValueError(
+            "La submuestra de referencia sin RCIU-Fenton tiene menos de 2 sujetos válidos."
+        )
 
     rows: list[dict[str, Any]] = []
     for roi in abs_rois:
@@ -635,8 +808,8 @@ def contrast_rois_term_vs_preterm(
                 "roi": roi,
                 "family": family,
                 "is_primary_atlas": not roi.startswith("dk_"),
-                "in_shortlist_18": roi in SHORTLIST_3DOMAIN_18,
                 "in_shortlist_vol12": roi in SHORTLIST_CORE_VOL_12,
+                "in_shortlist_18": roi in SHORTLIST_3DOMAIN_18,
                 "n_preterm": len(x_pre),
                 "n_ref": len(y_ref),
                 "mean_preterm": float(np.mean(x_pre)),
@@ -709,7 +882,6 @@ def _partial_assoc_with_sex(
         raise ValueError(f"Varianza nula en '{roi_col}' dentro de prematuros.")
     x_std = (x - float(np.mean(x))) / sx
 
-    # Residualización sobre BIRTH_sexo5 si el sexo varía en la muestra.
     if np.std(sex) > 0:
         rx = x_std - np.polyval(np.polyfit(sex, x_std, 1), sex)
         ry = y - np.polyval(np.polyfit(sex, y, 1), sex)
@@ -721,7 +893,6 @@ def _partial_assoc_with_sex(
     r_val, p_val = stats.pearsonr(rx, ry)
     rho_val, _ = stats.spearmanr(rx, ry)
 
-    # IC 95% de Fisher z para la correlación parcial (gl = n - 3).
     z_f = np.arctanh(np.clip(r_val, -0.999999, 0.999999))
     se_z = 1.0 / np.sqrt(max(n - 4, 1))
     r_low = float(np.tanh(z_f - 1.96 * se_z))
@@ -762,37 +933,47 @@ def analyze_structure_nhpt_association(
     merged_df: pd.DataFrame,
     roi_cols: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Cuantifica la asociación estructura-NHPT en prematuros (absolutas e *_icvadj)."""
+    """Cuantifica la asociación estructura-NHPT en prematuros (absolutas e *_icvadj).
+
+    Raises:
+        ValueError: Si faltan columnas requeridas o si BIRTH_sexo5 tiene nulos/inválidos.
+    """
     required = ["fit_sample", "qc_ok", "nhpt_mean", "BIRTH_sexo5"]
     missing = [c for c in required if c not in merged_df.columns]
     if missing:
         raise ValueError(f"Faltan columnas para asociación estructura-NHPT: {missing}")
 
+    fit_df = merged_df.loc[merged_df["fit_sample"].eq(True)].copy()
+    fit_df["BIRTH_sexo5"] = _validate_sex_series(
+        fit_df["BIRTH_sexo5"], "analyze_structure_nhpt_association"
+    )
+    qc_df = fit_df.loc[fit_df["qc_ok"].eq(True)].copy()
+
     if roi_cols is None:
         base_shortlist = list(SHORTLIST_3DOMAIN_18.keys())
         icvadj_shortlist = [
-            f"{c}_icvadj"
-            for c in base_shortlist
-            if f"{c}_icvadj" in merged_df.columns
+            f"{c}_icvadj" for c in base_shortlist if f"{c}_icvadj" in merged_df.columns
         ]
         curv_shortlist = [
-            c
-            for c in merged_df.columns
-            if c.startswith("ba_") and c.endswith("_curv")
+            c for c in merged_df.columns if c.startswith("ba_") and c.endswith("_curv")
         ]
-        Composite_cols = [
+        composite_cols = [
             c
-            for c in ("hw_motor", "hw_motor_qc", "hw_norm_score", "hw_norm_score_vol12")
+            for c in (
+                "hw_motor",
+                "hw_motor_qc",
+                "hw_norm_score",
+                "hw_norm_score_vol12",
+                "hw_norm_score_sex",
+                "hw_norm_score_3domain18",
+            )
             if c in merged_df.columns
         ]
         roi_cols = list(
             dict.fromkeys(
-                [*base_shortlist, *icvadj_shortlist, *curv_shortlist, *Composite_cols]
+                [*base_shortlist, *icvadj_shortlist, *curv_shortlist, *composite_cols]
             )
         )
-
-    fit_df = merged_df.loc[merged_df["fit_sample"].eq(True)].copy()
-    qc_df = fit_df.loc[fit_df["qc_ok"].eq(True)].copy()
 
     rows: list[dict[str, Any]] = []
     for col in roi_cols:
@@ -803,7 +984,11 @@ def analyze_structure_nhpt_association(
         rows.append(
             {
                 "feature": col,
-                "scale_type": "icv_adjusted" if col.endswith("_icvadj") else "absolute_or_composite",
+                "scale_type": (
+                    "icv_adjusted"
+                    if col.endswith("_icvadj")
+                    else "absolute_or_composite"
+                ),
                 "n_fit": int(res_fit["n"]),
                 "partial_r_fit": res_fit["partial_r"],
                 "partial_r_ci95_low_fit": res_fit["partial_r_ci95_low"],
@@ -840,13 +1025,17 @@ def _compute_reference_anchored_score(
 ) -> tuple[pd.Series, pd.DataFrame]:
     """Calcula el puntaje compuesto re-estandarizado respecto a la referencia (med=0, MAD_esc=1)."""
     ref_df = df_all.loc[ref_mask]
-    if ref_df.empty:
-        raise ValueError("La máscara de referencia no contiene sujetos.")
+    if len(ref_df) < 2:
+        raise ValueError(
+            f"La máscara de referencia tiene menos de 2 sujetos (n={len(ref_df)})."
+        )
 
     z_dict: dict[str, pd.Series] = {}
     for col, sign in components.items():
         if col not in df_all.columns:
-            raise ValueError(f"Falta la estructura '{col}' para calcular hw_norm_score.")
+            raise ValueError(
+                f"Falta la estructura '{col}' para calcular hw_norm_score."
+            )
         z_dict[col] = float(sign) * _robust_standardize(df_all[col], ref_df[col])
 
     z_mat = pd.DataFrame(z_dict, index=df_all.index)
@@ -856,68 +1045,173 @@ def _compute_reference_anchored_score(
     return norm_score, z_mat
 
 
+def _compute_sex_stratified_reference_score(
+    df_all: pd.DataFrame,
+    ref_mask: pd.Series,
+    components: dict[str, int],
+) -> pd.Series:
+    """Estandariza cada componente y el compuesto dentro de cada sexo de la referencia."""
+    sex_valid = _validate_sex_series(
+        df_all["BIRTH_sexo5"], "compute_normative_hardware_ok (sex-stratified)"
+    )
+    out_score = pd.Series(np.nan, index=df_all.index, dtype=float)
+    for sex_code in VALID_SEX_CODES:
+        sex_mask = sex_valid.eq(sex_code)
+        if not sex_mask.any():
+            continue
+        ref_sex_mask = ref_mask & sex_mask
+        if int(ref_sex_mask.sum()) < 2:
+            raise ValueError(
+                f"La referencia a término para BIRTH_sexo5=={sex_code} tiene menos de 2 sujetos."
+            )
+        sub_df = df_all.loc[sex_mask]
+        ref_sub = df_all.loc[ref_sex_mask]
+        z_sex = pd.DataFrame(
+            {
+                col: float(sign) * _robust_standardize(sub_df[col], ref_sub[col])
+                for col, sign in components.items()
+            },
+            index=sub_df.index,
+        )
+        raw_sex = z_sex.mean(axis=1, skipna=False)
+        raw_sex.name = f"raw_sex_{sex_code}"
+        out_score.loc[sex_mask] = _robust_standardize(
+            raw_sex, raw_sex.loc[ref_sex_mask.loc[sex_mask]]
+        )
+    return out_score
+
+
 def compute_normative_hardware_ok(
     merged_df: pd.DataFrame,
-    components: dict[str, int] = SHORTLIST_3DOMAIN_18,
+    components: dict[str, int] = SHORTLIST_CORE_VOL_12,
     threshold: float = DEFAULT_NORM_THRESHOLD,
     max_impaired_count: int = DEFAULT_MAX_IMPAIRED_COUNT,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Construye hardware_ok.parquet para fit_sample y la tabla agregada de calibración."""
-    required = ["code", "ubicac", "fit_sample", "qc_ok", "rciu_fenton_ref", "nhpt_mean", "z_nhpt_ref"]
+    """Construye hardware_ok.parquet para fit_sample y la tabla agregada de calibración.
+
+    El índice principal (`hw_norm_score` / `hardware_ok`) se calcula sobre los 12
+    volúmenes motores (`SHORTLIST_CORE_VOL_12`) anclados a la referencia a término.
+    Se exportan además las sensibilidades sin RCIU-Fenton (`hardware_ok_no_rciu`),
+    estratificada por sexo (`hardware_ok_sex`), multimétrica de 18 variables
+    (`hardware_ok_3domain18`) y por conteo (`hardware_ok_count`).
+    """
+    required = [
+        "code",
+        "ubicac",
+        "fit_sample",
+        "qc_ok",
+        "rciu_fenton_ref",
+        "BIRTH_sexo5",
+        "nhpt_mean",
+        "z_nhpt_ref",
+    ]
     missing = [c for c in required if c not in merged_df.columns]
     if missing:
         raise ValueError(f"Faltan columnas requeridas en merged_df: {missing}")
 
     ref_mask = merged_df["ubicac"].eq(3) & merged_df["icv"].notna()
-    ref_no_rciu_mask = ref_mask & (~merged_df["rciu_fenton_ref"].fillna(False).astype(bool))
-    if not ref_no_rciu_mask.any():
-        ref_no_rciu_mask = ref_mask
+    ref_no_rciu_mask = ref_mask & (
+        ~merged_df["rciu_fenton_ref"].fillna(False).astype(bool)
+    )
+    if int(ref_no_rciu_mask.sum()) < 2:
+        raise ValueError(
+            "La submuestra de referencia sin RCIU-Fenton tiene menos de 2 sujetos válidos."
+        )
 
-    # 1. Score normativo principal (18 métricas de 3 dominios, referencia completa)
-    score_main, _ = _compute_reference_anchored_score(merged_df, ref_mask, components)
-
-    # 2. Sensibilidad volumétrica pura (12 volúmenes motores)
-    score_vol12, z_vol12 = _compute_reference_anchored_score(
-        merged_df, ref_mask, SHORTLIST_CORE_VOL_12
+    # 1. Score normativo principal (12 volúmenes motores, referencia completa)
+    score_main, z_main = _compute_reference_anchored_score(
+        merged_df, ref_mask, components
     )
 
-    # 3. Sensibilidad anclada a referencia sin RCIU-Fenton
+    # 2. Alias explícito de 12 volúmenes motores (si components es distinto, lo calcula sobre VOL12)
+    if components == SHORTLIST_CORE_VOL_12:
+        score_vol12, z_vol12 = score_main, z_main
+    else:
+        score_vol12, z_vol12 = _compute_reference_anchored_score(
+            merged_df, ref_mask, SHORTLIST_CORE_VOL_12
+        )
+
+    # 3. Sensibilidad anclada a referencia sin RCIU-Fenton (sobre components principal)
     score_no_rciu, _ = _compute_reference_anchored_score(
         merged_df, ref_no_rciu_mask, components
     )
 
-    # 4. Conteo de estructuras volumétricas por debajo de -1.0 DE_rob de la referencia
-    n_impaired = (z_vol12 < threshold).sum(axis=1).astype("int64")
+    # 4. Sensibilidad con normas estratificadas por sexo (sobre SHORTLIST_CORE_VOL_12)
+    score_sex = _compute_sex_stratified_reference_score(merged_df, ref_mask, components)
+
+    # 5. Sensibilidad multimétrica de 3 dominios (18 métricas incluyendo FA y RD del CST)
+    score_3domain18, _ = _compute_reference_anchored_score(
+        merged_df, ref_mask, SHORTLIST_3DOMAIN_18
+    )
+
+    # 6. Conteo de estructuras volumétricas por debajo de threshold DE_rob de la referencia
+    any_z_na = z_vol12.isna().any(axis=1)
+    n_impaired = (z_vol12 < threshold).sum(axis=1).astype("Int64")
+    n_impaired = n_impaired.where(~any_z_na, pd.NA)
 
     work = merged_df.copy()
     work["hw_norm_score"] = score_main
     work["hw_norm_score_vol12"] = score_vol12
     work["hw_norm_score_no_rciu"] = score_no_rciu
+    work["hw_norm_score_sex"] = score_sex
+    work["hw_norm_score_3domain18"] = score_3domain18
     work["n_impaired_structures"] = n_impaired
 
-    work["hardware_ok"] = work["hw_norm_score"].ge(threshold).astype(bool)
-    work["hardware_ok_qc"] = (
-        work["hardware_ok"].astype("boolean").where(work["qc_ok"].eq(True), pd.NA)
+    work["hardware_ok"] = _score_to_nullable_bool(work["hw_norm_score"], threshold)
+    work["hardware_ok_qc"] = work["hardware_ok"].where(work["qc_ok"].eq(True), pd.NA)
+    work["hardware_ok_no_rciu"] = _score_to_nullable_bool(
+        work["hw_norm_score_no_rciu"], threshold
     )
-    work["hardware_ok_no_rciu"] = work["hw_norm_score_no_rciu"].ge(threshold).astype(bool)
-    work["hardware_ok_vol12"] = work["hw_norm_score_vol12"].ge(threshold).astype(bool)
-    work["hardware_ok_count"] = (
-        work["n_impaired_structures"].le(max_impaired_count).astype(bool)
+    work["hardware_ok_sex"] = _score_to_nullable_bool(
+        work["hw_norm_score_sex"], threshold
     )
+    work["hardware_ok_vol12"] = _score_to_nullable_bool(
+        work["hw_norm_score_vol12"], threshold
+    )
+    work["hardware_ok_3domain18"] = _score_to_nullable_bool(
+        work["hw_norm_score_3domain18"], threshold
+    )
+
+    count_ok = pd.Series(pd.NA, index=work.index, dtype="boolean")
+    valid_cnt = work["n_impaired_structures"].notna()
+    count_ok.loc[valid_cnt] = (
+        work.loc[valid_cnt, "n_impaired_structures"]
+        .le(max_impaired_count)
+        .to_numpy(dtype=bool)
+    )
+    work["hardware_ok_count"] = count_ok
 
     fit_out = (
-        work.loc[work["fit_sample"].eq(True), OUTPUT_COLS]
-        .copy()
-        .reset_index(drop=True)
+        work.loc[work["fit_sample"].eq(True), OUTPUT_COLS].copy().reset_index(drop=True)
     )
 
-    # Tabla agregada de calibración de criterios candidatos (para reporte / Streamlit #34).
     qc_sub = fit_out.loc[fit_out["qc_ok"].eq(True)]
     candidates = [
-        ("hardware_ok_main_3domain18_ge_m1sd", fit_out["hardware_ok"], qc_sub["hardware_ok"]),
-        ("hardware_ok_no_rciu_3domain18_ge_m1sd", fit_out["hardware_ok_no_rciu"], qc_sub["hardware_ok_no_rciu"]),
-        ("hardware_ok_vol12_ge_m1sd", fit_out["hardware_ok_vol12"], qc_sub["hardware_ok_vol12"]),
-        ("hardware_ok_count_le2_of_12", fit_out["hardware_ok_count"], qc_sub["hardware_ok_count"]),
+        (
+            "hardware_ok_main_vol12_ge_m1sd",
+            fit_out["hardware_ok"],
+            qc_sub["hardware_ok"],
+        ),
+        (
+            "hardware_ok_no_rciu_vol12_ge_m1sd",
+            fit_out["hardware_ok_no_rciu"],
+            qc_sub["hardware_ok_no_rciu"],
+        ),
+        (
+            "hardware_ok_sex_vol12_ge_m1sd",
+            fit_out["hardware_ok_sex"],
+            qc_sub["hardware_ok_sex"],
+        ),
+        (
+            "hardware_ok_3domain18_ge_m1sd",
+            fit_out["hardware_ok_3domain18"],
+            qc_sub["hardware_ok_3domain18"],
+        ),
+        (
+            "hardware_ok_count_le2_of_12",
+            fit_out["hardware_ok_count"],
+            qc_sub["hardware_ok_count"],
+        ),
         (
             "rejected_strict_intersection_0_of_12",
             fit_out["n_impaired_structures"].eq(0),
@@ -926,15 +1220,21 @@ def compute_normative_hardware_ok(
     ]
     cal_rows: list[dict[str, Any]] = []
     for name, s_fit, s_qc in candidates:
+        s_fit_clean = s_fit.dropna()
+        s_qc_clean = s_qc.dropna()
         cal_rows.append(
             {
                 "criterion": name,
-                "n_fit_total": len(s_fit),
-                "n_fit_ok": int(s_fit.sum()),
-                "pct_fit_ok": float(100.0 * s_fit.mean()) if len(s_fit) else np.nan,
-                "n_qc_total": len(s_qc),
-                "n_qc_ok": int(s_qc.sum()),
-                "pct_qc_ok": float(100.0 * s_qc.mean()) if len(s_qc) else np.nan,
+                "n_fit_total": len(s_fit_clean),
+                "n_fit_ok": int(s_fit_clean.sum()),
+                "pct_fit_ok": (
+                    float(100.0 * s_fit_clean.mean()) if len(s_fit_clean) else np.nan
+                ),
+                "n_qc_total": len(s_qc_clean),
+                "n_qc_ok": int(s_qc_clean.sum()),
+                "pct_qc_ok": (
+                    float(100.0 * s_qc_clean.mean()) if len(s_qc_clean) else np.nan
+                ),
             }
         )
 
@@ -957,26 +1257,34 @@ def build_hardware_ok_pipeline(
     )
     roi_contrast_df = contrast_rois_term_vs_preterm(hw_df, interim_df)
 
-    # Unir hw_df con nhpt_subj_df y BIRTH_sexo5 para los pilares 3a y 3b.
-    extra_cols = ["code", "rciu_fenton_ref", "nhpt_mean", "z_nhpt_ref"]
-    if "BIRTH_sexo5" in nhpt_subj_df.columns:
-        extra_cols.append("BIRTH_sexo5")
+    extra_cols = [
+        "code",
+        "rciu_fenton_ref",
+        "BIRTH_sexo5",
+        "nhpt_mean",
+        "z_nhpt_ref",
+    ]
     merged = hw_df.merge(
         nhpt_subj_df[extra_cols].drop_duplicates(subset=["code"]),
         on="code",
         how="left",
     )
-    if "BIRTH_sexo5" not in merged.columns:
-        merged["BIRTH_sexo5"] = 1.0
-    else:
-        merged["BIRTH_sexo5"] = pd.to_numeric(merged["BIRTH_sexo5"], errors="coerce")
+    merged["BIRTH_sexo5"] = _validate_sex_series(
+        merged["BIRTH_sexo5"], "build_hardware_ok_pipeline"
+    )
 
     hw_ok_df, calibration_df = compute_normative_hardware_ok(merged)
 
-    # Incorporar hw_norm_score y hw_norm_score_vol12 al dataframe para evaluar su
-    # asociación con NHPT junto con las ROIs individuales.
     merged_with_scores = merged.merge(
-        hw_ok_df[["code", "hw_norm_score", "hw_norm_score_vol12"]],
+        hw_ok_df[
+            [
+                "code",
+                "hw_norm_score",
+                "hw_norm_score_vol12",
+                "hw_norm_score_sex",
+                "hw_norm_score_3domain18",
+            ]
+        ],
         on="code",
         how="left",
     )
@@ -988,10 +1296,11 @@ def build_hardware_ok_pipeline(
         "contraste_80_rois_absolutas": roi_contrast_df,
         "asociacion_estructura_nhpt": assoc_df,
         "calibracion_hardware_ok": {
-            "primary_shortlist": list(SHORTLIST_3DOMAIN_18.keys()),
-            "sensitivity_vol12_shortlist": list(SHORTLIST_CORE_VOL_12.keys()),
+            "primary_shortlist_vol12": list(SHORTLIST_CORE_VOL_12.keys()),
+            "sensitivity_3domain18_shortlist": list(SHORTLIST_3DOMAIN_18.keys()),
             "threshold_sd_rob": DEFAULT_NORM_THRESHOLD,
             "max_impaired_count": DEFAULT_MAX_IMPAIRED_COUNT,
+            "mathiowetz_norms_20_24": MATHIOWETZ_NORMS_20_24,
             "nhpt_bimanual_concordance": nhpt_concordance,
             "calibration_candidates": calibration_df.to_dict(orient="records"),
         },
@@ -1041,21 +1350,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     hw_ok_df, reports = build_hardware_ok_pipeline(args.hw_path, args.interim_dir)
     export_outputs(hw_ok_df, reports, args.output, args.reports_dir)
 
-    n_fit = len(hw_ok_df)
-    n_ok_fit = int(hw_ok_df["hardware_ok"].sum())
+    fit_valid = hw_ok_df["hardware_ok"].dropna()
+    n_fit = len(fit_valid)
+    n_ok_fit = int(fit_valid.sum())
     qc_valid = hw_ok_df["hardware_ok_qc"].dropna()
     n_qc = len(qc_valid)
     n_ok_qc = int(qc_valid.sum())
 
     logger.info("Módulo 4.5 (hardware_ok) ejecutado exitosamente:")
     logger.info(
-        "  hardware_ok en fit_sample: %d / %d (%.1f%%)",
+        "  hardware_ok (12 vol) en fit_sample: %d / %d (%.1f%%)",
         n_ok_fit,
         n_fit,
         100.0 * n_ok_fit / max(n_fit, 1),
     )
     logger.info(
-        "  hardware_ok_qc en qc_ok:   %d / %d (%.1f%%)",
+        "  hardware_ok_qc (12 vol) en qc_ok:   %d / %d (%.1f%%)",
         n_ok_qc,
         n_qc,
         100.0 * n_ok_qc / max(n_qc, 1),

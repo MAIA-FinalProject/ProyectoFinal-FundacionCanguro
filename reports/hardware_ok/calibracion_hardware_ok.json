@@ -1,25 +1,5 @@
 {
-  "primary_shortlist": [
-    "sub_lh_caudate_vol",
-    "sub_rh_caudate_vol",
-    "sub_lh_putamen_vol",
-    "sub_rh_putamen_vol",
-    "sub_lh_pallidum_vol",
-    "sub_rh_pallidum_vol",
-    "ba_lh_ba4a_vol",
-    "ba_rh_ba4a_vol",
-    "ba_lh_ba3b_vol",
-    "ba_rh_ba3b_vol",
-    "ba_lh_ba2_vol",
-    "ba_rh_ba2_vol",
-    "cst_lh_vol",
-    "cst_rh_vol",
-    "cst_lh_fa",
-    "cst_rh_fa",
-    "cst_lh_rd",
-    "cst_rh_rd"
-  ],
-  "sensitivity_vol12_shortlist": [
+  "primary_shortlist_vol12": [
     "sub_lh_caudate_vol",
     "sub_rh_caudate_vol",
     "sub_lh_putamen_vol",
@@ -33,8 +13,44 @@
     "ba_lh_ba3b_vol",
     "ba_rh_ba3b_vol"
   ],
+  "sensitivity_3domain18_shortlist": [
+    "sub_lh_caudate_vol",
+    "sub_rh_caudate_vol",
+    "sub_lh_putamen_vol",
+    "sub_rh_putamen_vol",
+    "sub_lh_pallidum_vol",
+    "sub_rh_pallidum_vol",
+    "cst_lh_vol",
+    "cst_rh_vol",
+    "ba_lh_ba4a_vol",
+    "ba_rh_ba4a_vol",
+    "ba_lh_ba3b_vol",
+    "ba_rh_ba3b_vol",
+    "ba_lh_ba2_vol",
+    "ba_rh_ba2_vol",
+    "cst_lh_fa",
+    "cst_rh_fa",
+    "cst_lh_rd",
+    "cst_rh_rd"
+  ],
   "threshold_sd_rob": -1.0,
   "max_impaired_count": 2,
+  "mathiowetz_norms_20_24": {
+    "1": {
+      "right_mean": 15.8,
+      "right_sd": 2.1,
+      "left_mean": 17.2,
+      "left_sd": 2.4,
+      "bimanual_mean": 16.5
+    },
+    "2": {
+      "right_mean": 16.1,
+      "right_sd": 1.9,
+      "left_mean": 16.8,
+      "left_sd": 2.2,
+      "bimanual_mean": 16.45
+    }
+  },
   "nhpt_bimanual_concordance": {
     "n_both_hands_total": 483,
     "pearson_r_total": 0.6556945623507716,
@@ -42,35 +58,51 @@
     "spearman_rho_total": 0.49487565892439256,
     "pearson_r_fit_sample": 0.7424232085238671,
     "pearson_p_fit_sample": 7.233555030474282e-38,
-    "mean_diff_mnd_minus_md_s": 1.7204140786749482
+    "mean_diff_mnd_minus_md_s": 1.7204140786749482,
+    "ref_n_lateralized": 49,
+    "ref_z_math_right_mean": 0.9298757096823688,
+    "ref_z_math_left_mean": 1.1661255411255411,
+    "ref_z_math_bimanual_mean": 1.0480006254039549,
+    "ref_pct_slower_than_mathiowetz_right": 85.71428571428571,
+    "ref_pct_slower_than_mathiowetz_left": 87.75510204081633,
+    "ref_pct_slower_than_mathiowetz_bimanual": 97.95918367346938
   },
   "calibration_candidates": [
     {
-      "criterion": "hardware_ok_main_3domain18_ge_m1sd",
-      "n_fit_total": 209,
-      "n_fit_ok": 109,
-      "pct_fit_ok": 52.15311004784689,
-      "n_qc_total": 168,
-      "n_qc_ok": 94,
-      "pct_qc_ok": 55.952380952380956
-    },
-    {
-      "criterion": "hardware_ok_no_rciu_3domain18_ge_m1sd",
-      "n_fit_total": 209,
-      "n_fit_ok": 99,
-      "pct_fit_ok": 47.368421052631575,
-      "n_qc_total": 168,
-      "n_qc_ok": 87,
-      "pct_qc_ok": 51.78571428571429
-    },
-    {
-      "criterion": "hardware_ok_vol12_ge_m1sd",
+      "criterion": "hardware_ok_main_vol12_ge_m1sd",
       "n_fit_total": 209,
       "n_fit_ok": 93,
       "pct_fit_ok": 44.49760765550239,
       "n_qc_total": 168,
       "n_qc_ok": 79,
       "pct_qc_ok": 47.023809523809526
+    },
+    {
+      "criterion": "hardware_ok_no_rciu_vol12_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 98,
+      "pct_fit_ok": 46.889952153110045,
+      "n_qc_total": 168,
+      "n_qc_ok": 84,
+      "pct_qc_ok": 50.0
+    },
+    {
+      "criterion": "hardware_ok_sex_vol12_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 91,
+      "pct_fit_ok": 43.54066985645933,
+      "n_qc_total": 168,
+      "n_qc_ok": 75,
+      "pct_qc_ok": 44.642857142857146
+    },
+    {
+      "criterion": "hardware_ok_3domain18_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 109,
+      "pct_fit_ok": 52.15311004784689,
+      "n_qc_total": 168,
+      "n_qc_ok": 94,
+      "pct_qc_ok": 55.952380952380956
     },
     {
       "criterion": "hardware_ok_count_le2_of_12",

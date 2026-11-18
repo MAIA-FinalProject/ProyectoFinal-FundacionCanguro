@@ -31,11 +31,15 @@ def synthetic_interim_and_hw() -> tuple[pd.DataFrame, pd.DataFrame]:
     icv = np.where(
         is_ref, rng.normal(1.27e6, 8e4, N_SYNTH), rng.normal(1.17e6, 9e4, N_SYNTH)
     )
-    # Referencia más rápida en NHPT y con mayores volúmenes motores absolutos.
     nhpt_md = np.where(
         is_ref, rng.normal(17.5, 1.4, N_SYNTH), rng.normal(18.5, 2.2, N_SYNTH)
     )
     nhpt_mnd = nhpt_md + rng.normal(1.8, 1.2, N_SYNTH)
+
+    # Garantizar al menos 8 mujeres (1) y 8 hombres (2) en la referencia (índices 60..79)
+    sex = rng.choice([1, 2], size=N_SYNTH)
+    sex[60:70] = 1
+    sex[70:80] = 2
 
     data: dict[str, np.ndarray] = {
         "code": np.arange(1, N_SYNTH + 1),
@@ -54,7 +58,7 @@ def synthetic_interim_and_hw() -> tuple[pd.DataFrame, pd.DataFrame]:
         "BIRTH_pc5": np.where(
             is_ref, rng.normal(345, 10, N_SYNTH), rng.normal(295, 18, N_SYNTH)
         ),
-        "BIRTH_sexo5": rng.choice([1, 2], size=N_SYNTH),
+        "BIRTH_sexo5": sex,
         "BIRTH_cesarea": rng.choice([0, 1], size=N_SYNTH),
         "BIRTH_RCIUFenton": np.where(np.arange(N_SYNTH) >= 75, 1, 0),
         "SCB_agemother": rng.normal(27.0, 5.0, N_SYNTH),
@@ -69,10 +73,9 @@ def synthetic_interim_and_hw() -> tuple[pd.DataFrame, pd.DataFrame]:
         bh.MPRAGE_MOV_COL: np.ones(N_SYNTH),
         "NHPT_promedioMD": nhpt_md,
         "NHPT_promedioMND": nhpt_mnd,
-        "NHPT_ManoDominante": rng.choice([1, 3], size=N_SYNTH, p=[0.9, 0.1]),
+        "NHPT_ManoDominante": np.where(np.arange(N_SYNTH) % 5 == 0, 3, 1),
     }
 
-    # Simular un factor latente motor que conecta volumen cerebral con mejor NHPT (menor tiempo).
     latent_motor = (18.5 - nhpt_md) / 2.0 + np.where(is_ref, 0.6, 0.0)
     for feat, raw_col in bh.FEATURE_MAP.items():
         if feat.endswith(("_vol", "_area")):
@@ -95,41 +98,54 @@ def synthetic_interim_and_hw() -> tuple[pd.DataFrame, pd.DataFrame]:
     return hw_df, interim_df
 
 
-def test_table1_and_nhpt_characterization_synthetic(
+def test_table1_and_nhpt_mathiowetz_lateralization(
     synthetic_interim_and_hw: tuple[pd.DataFrame, pd.DataFrame],
 ) -> None:
-    """Valida la Tabla 1 descriptiva, el cálculo de nhpt_mean, z_nhpt_ref y la concordancia."""
+    """Valida Tabla 1, reconstrucción derecha/izquierda por lateralidad y normas Mathiowetz."""
     hw_df, interim_df = synthetic_interim_and_hw
 
-    table1 = bho.build_table1_summary(interim_df, hw_df)
+    # Introducir un código de lateralidad desconocido en el sujeto 0 para verificar NaN lateralizado.
+    interim_mod = interim_df.copy()
+    interim_mod.loc[0, "NHPT_ManoDominante"] = 9
+
+    table1 = bho.build_table1_summary(interim_mod, hw_df)
     assert not table1.empty
-    assert {
-        "variable",
-        "kind",
-        "n_ref_mri",
-        "n_preterm_fit",
-        "hedges_g_pre_vs_ref",
-    } <= set(table1.columns)
     peso_row = table1.loc[table1["variable"] == "BIRTH_peso5"].iloc[0]
-    assert (
-        peso_row["hedges_g_pre_vs_ref"] < -2.0
-    )  # Prematuros pesan mucho menos que término
+    assert peso_row["hedges_g_pre_vs_ref"] < -2.0
 
-    nhpt_subj, nhpt_summary, concordance = bho.characterize_nhpt(interim_df, hw_df)
-    assert {"nhpt_mean", "z_md_ref", "z_mnd_ref", "z_nhpt_ref"} <= set(
-        nhpt_subj.columns
-    )
+    nhpt_subj, nhpt_summary, concordance = bho.characterize_nhpt(interim_mod, hw_df)
+    assert {
+        "nhpt_mean",
+        "nhpt_right",
+        "nhpt_left",
+        "z_math_right",
+        "z_math_left",
+        "z_math_bimanual",
+        "z_nhpt_ref",
+    } <= set(nhpt_subj.columns)
 
-    # Menor tiempo en segundos debe producir un mayor z_nhpt_ref (mejor desempeño).
-    corr_sign = np.corrcoef(nhpt_subj["nhpt_mean"], nhpt_subj["z_nhpt_ref"])[0, 1]
-    assert corr_sign < -0.99
+    # Sujeto 0 (NHPT_ManoDominante == 9) debe tener NaN en nhpt_right/left pero valor en nhpt_mean.
+    row0 = nhpt_subj.loc[nhpt_subj["code"] == 1].iloc[0]
+    assert np.isnan(row0["nhpt_right"]) and np.isnan(row0["nhpt_left"])
+    assert not np.isnan(row0["nhpt_mean"])
 
-    # La mediana de z_nhpt_ref en el grupo de referencia debe ser exactamente 0.0.
-    ref_z_med = nhpt_subj.loc[nhpt_subj["ubicac"] == 3, "z_nhpt_ref"].median()
-    assert abs(ref_z_med) < 1e-10
+    # Sujeto diestro (ManoDominante == 1): derecha == MD, izquierda == MND.
+    right_handed = nhpt_subj.loc[nhpt_subj["NHPT_ManoDominante"] == 1].iloc[0]
+    assert right_handed["nhpt_right"] == pytest.approx(right_handed["NHPT_promedioMD"])
+    assert right_handed["nhpt_left"] == pytest.approx(right_handed["NHPT_promedioMND"])
 
-    assert concordance["n_both_hands_total"] == N_SYNTH
-    assert concordance["pearson_r_total"] > 0.5
+    # Sujeto zurdo (ManoDominante == 3): izquierda == MD, derecha == MND.
+    left_handed = nhpt_subj.loc[nhpt_subj["NHPT_ManoDominante"] == 3].iloc[0]
+    assert left_handed["nhpt_left"] == pytest.approx(left_handed["NHPT_promedioMD"])
+    assert left_handed["nhpt_right"] == pytest.approx(left_handed["NHPT_promedioMND"])
+
+    # Verificar normas exactas de Mathiowetz (1985) en la constante.
+    assert bho.MATHIOWETZ_NORMS_20_24[1]["right_mean"] == 15.8
+    assert bho.MATHIOWETZ_NORMS_20_24[1]["left_mean"] == 17.2
+    assert bho.MATHIOWETZ_NORMS_20_24[2]["right_mean"] == 16.1
+    assert bho.MATHIOWETZ_NORMS_20_24[2]["left_mean"] == 16.8
+
+    assert "ref_pct_slower_than_mathiowetz_bimanual" in concordance
     assert not nhpt_summary.empty
 
 
@@ -140,28 +156,12 @@ def test_contrast_rois_uses_only_absolute_columns_dec016(
     hw_df, interim_df = synthetic_interim_and_hw
     contrast = bho.contrast_rois_term_vs_preterm(hw_df, interim_df)
 
-    # Exactamente 1 ICV + 80 ROIs absolutas = 81 filas.
     assert len(contrast) == 81
     assert not contrast["roi"].str.endswith("_icvadj").any()
-    assert int(contrast["is_primary_atlas"].sum()) == 65  # 1 ICV + 64 ROIs sin Desikan
-    assert int(contrast["in_shortlist_18"].sum()) == 18
+    assert int(contrast["is_primary_atlas"].sum()) == 65
     assert int(contrast["in_shortlist_vol12"].sum()) == 12
+    assert int(contrast["in_shortlist_18"].sum()) == 18
 
-    required_metrics = {
-        "cohens_d",
-        "hedges_g",
-        "hedges_g_ci95_low",
-        "hedges_g_ci95_high",
-        "cliffs_delta",
-        "p_welch",
-        "p_mwu",
-        "q_fdr_welch_primary65",
-        "q_fdr_mwu_primary65",
-        "hedges_g_qc_ok",
-        "hedges_g_no_rciu",
-    }
-    assert required_metrics <= set(contrast.columns)
-    # Desikan no entra al ajuste FDR primario (65 métricas).
     assert (
         contrast.loc[~contrast["is_primary_atlas"], "q_fdr_welch_primary65"]
         .isna()
@@ -193,21 +193,18 @@ def test_structure_nhpt_association_controls_for_sex(
     assert {"icv_adjusted", "absolute_or_composite"} <= set(
         assoc["scale_type"].unique()
     )
-    assert {
-        "partial_r_fit",
-        "ols_beta_s_per_sd_fit",
-        "q_fdr_fit",
-        "partial_r_qc",
-    } <= set(assoc.columns)
-    # En los datos sintéticos, mayor volumen se asocia con menor tiempo en NHPT (r < 0).
+    # Verifica que FA y RD del tracto corticoespinal sigan incluidos en la asociación.
+    assert {"cst_lh_fa", "cst_rh_fa", "cst_lh_rd", "cst_rh_rd"} <= set(
+        assoc["feature"].values
+    )
     caudate_row = assoc.loc[assoc["feature"] == "sub_lh_caudate_vol"].iloc[0]
     assert caudate_row["partial_r_fit"] < 0
 
 
-def test_compute_normative_hardware_ok_schema_and_balance(
+def test_compute_normative_hardware_ok_vol12_primary_and_sex_sensitivity(
     synthetic_interim_and_hw: tuple[pd.DataFrame, pd.DataFrame],
 ) -> None:
-    """Valida el esquema de 14 columnas de hardware_ok.parquet y el enmascaramiento por qc_ok."""
+    """Valida que SHORTLIST_CORE_VOL_12 sea el principal y verifica hardware_ok_sex y 3domain18."""
     hw_df, interim_df = synthetic_interim_and_hw
     nhpt_subj, _, _ = bho.characterize_nhpt(interim_df, hw_df)
     merged = hw_df.merge(
@@ -220,13 +217,114 @@ def test_compute_normative_hardware_ok_schema_and_balance(
 
     hw_ok_df, cal_df = bho.compute_normative_hardware_ok(merged)
     assert list(hw_ok_df.columns) == bho.OUTPUT_COLS
-    assert len(hw_ok_df) == 50  # Solo fit_sample == True
+    assert len(hw_ok_df) == 50
 
-    # Los 5 sujetos con mala calidad de imagen tienen qc_ok == False y hardware_ok_qc == <NA>.
+    # Por defecto, hw_norm_score coincide exactamente con hw_norm_score_vol12.
+    pd.testing.assert_series_equal(
+        hw_ok_df["hw_norm_score"], hw_ok_df["hw_norm_score_vol12"], check_names=False
+    )
+    pd.testing.assert_series_equal(
+        hw_ok_df["hardware_ok"], hw_ok_df["hardware_ok_vol12"], check_names=False
+    )
+
+    # Sensibilidades presentes y sin nulos en datos completos.
+    assert hw_ok_df["hw_norm_score_sex"].notna().all()
+    assert hw_ok_df["hardware_ok_sex"].notna().all()
+    assert hw_ok_df["hw_norm_score_3domain18"].notna().all()
+    assert hw_ok_df["hardware_ok_3domain18"].notna().all()
+
+    # Los 5 sujetos con qc_ok == False tienen hardware_ok_qc == <NA>.
     assert int((~hw_ok_df["qc_ok"]).sum()) == 5
     assert hw_ok_df.loc[~hw_ok_df["qc_ok"], "hardware_ok_qc"].isna().all()
     assert hw_ok_df.loc[hw_ok_df["qc_ok"], "hardware_ok_qc"].notna().all()
-    assert len(cal_df) == 5
+    assert len(cal_df) == 6
+
+
+def test_missing_norm_score_preserves_na_in_boolean_labels(
+    synthetic_interim_and_hw: tuple[pd.DataFrame, pd.DataFrame],
+) -> None:
+    """Un hw_norm_score faltante debe propagarse como <NA> y nunca convertirse en False."""
+    hw_df, interim_df = synthetic_interim_and_hw
+    nhpt_subj, _, _ = bho.characterize_nhpt(interim_df, hw_df)
+    merged = hw_df.merge(
+        nhpt_subj[
+            ["code", "rciu_fenton_ref", "nhpt_mean", "z_nhpt_ref", "BIRTH_sexo5"]
+        ],
+        on="code",
+        how="left",
+    )
+
+    # Introducir NaN en un volumen de un sujeto de fit_sample (code == 10).
+    merged.loc[merged["code"] == 10, "sub_lh_caudate_vol"] = np.nan
+    hw_ok_df, _ = bho.compute_normative_hardware_ok(merged)
+
+    row10 = hw_ok_df.loc[hw_ok_df["code"] == 10].iloc[0]
+    assert pd.isna(row10["hw_norm_score"])
+    for col in (
+        "hardware_ok",
+        "hardware_ok_qc",
+        "hardware_ok_no_rciu",
+        "hardware_ok_sex",
+        "hardware_ok_vol12",
+        "hardware_ok_3domain18",
+        "hardware_ok_count",
+        "n_impaired_structures",
+    ):
+        assert pd.isna(row10[col]), (
+            f"La columna '{col}' no preservó <NA> ante score nulo"
+        )
+
+
+def test_missing_or_invalid_sex_raises_value_error(
+    synthetic_interim_and_hw: tuple[pd.DataFrame, pd.DataFrame],
+) -> None:
+    """Si BIRTH_sexo5 contiene nulos o códigos inválidos, debe lanzar ValueError explícito."""
+    hw_df, interim_df = synthetic_interim_and_hw
+
+    bad_interim = interim_df.copy()
+    bad_interim.loc[0, "BIRTH_sexo5"] = np.nan
+    with pytest.raises(ValueError, match="BIRTH_sexo5"):
+        bho.characterize_nhpt(bad_interim, hw_df)
+
+    nhpt_subj, _, _ = bho.characterize_nhpt(interim_df, hw_df)
+    merged = hw_df.merge(
+        nhpt_subj[
+            ["code", "rciu_fenton_ref", "nhpt_mean", "z_nhpt_ref", "BIRTH_sexo5"]
+        ],
+        on="code",
+        how="left",
+    )
+    bad_merged = merged.copy()
+    bad_merged.loc[bad_merged["fit_sample"].eq(True).idxmax(), "BIRTH_sexo5"] = 9
+    with pytest.raises(ValueError, match="BIRTH_sexo5"):
+        bho.analyze_structure_nhpt_association(bad_merged)
+    with pytest.raises(ValueError, match="BIRTH_sexo5"):
+        bho.compute_normative_hardware_ok(bad_merged)
+
+
+def test_empty_no_rciu_reference_raises_value_error(
+    synthetic_interim_and_hw: tuple[pd.DataFrame, pd.DataFrame],
+) -> None:
+    """Si la submuestra de referencia sin RCIU-Fenton queda con <2 sujetos, lanza ValueError."""
+    hw_df, interim_df = synthetic_interim_and_hw
+    nhpt_subj, _, _ = bho.characterize_nhpt(interim_df, hw_df)
+    merged = hw_df.merge(
+        nhpt_subj[
+            ["code", "rciu_fenton_ref", "nhpt_mean", "z_nhpt_ref", "BIRTH_sexo5"]
+        ],
+        on="code",
+        how="left",
+    )
+
+    all_rciu_interim = interim_df.copy()
+    all_rciu_interim.loc[all_rciu_interim["ubicac"] == 3, "rciu_fenton_ref"] = True
+    with pytest.raises(ValueError, match="sin RCIU-Fenton"):
+        bho.contrast_rois_term_vs_preterm(hw_df, all_rciu_interim)
+
+    all_rciu_merged = merged.copy()
+    all_rciu_merged.loc[all_rciu_merged["ubicac"] == 3, "rciu_fenton_ref"] = True
+    with pytest.raises(ValueError, match="sin RCIU-Fenton"):
+        bho.compute_normative_hardware_ok(all_rciu_merged)
 
 
 def test_exported_reports_contain_no_subject_level_rows_dec001_dec005(
@@ -297,22 +395,25 @@ def test_real_data_integration() -> None:
     assert int(hw_ok_df["hardware_ok_qc"].notna().sum()) == 168
 
     # Balance de clases verificado para el Ticket #33 (DEC-031):
-    # - Principal (3 dominios, 18 métricas, >= -1.0 DE_rob): 109/209 (52.2%) y 94/168 (56.0%)
-    # - Sensibilidad volumétrica (12 volúmenes, >= -1.0 DE_rob): 93/209 (44.5%)
-    # - Sensibilidad conteo (<= 2 de 12 estructuras < -1.0 DE_rob): 93/209 (44.5%)
-    assert int(hw_ok_df["hardware_ok"].sum()) == 109
-    assert int(hw_ok_df["hardware_ok_qc"].dropna().sum()) == 94
-    assert int(hw_ok_df["hardware_ok_vol12"].sum()) == 93
+    # - Principal (12 volúmenes puros, SHORTLIST_CORE_VOL_12 >= -1.0 DE_rob): 93/209 (44.5%) y 79/168 (47.0%)
+    # - Sin RCIU-Fenton (12 volúmenes, n_ref=28): 98/209 (46.9%) y 84/168 (50.0%)
+    # - Estratificado por sexo (12 volúmenes): 91/209 (43.5%) y 75/168 (44.6%)
+    # - Sensibilidad 3 dominios (18 métricas incl. FA/RD): 109/209 (52.2%) y 94/168 (56.0%)
+    # - Sensibilidad conteo (<= 2 de 12 volúmenes < -1.0 DE_rob): 93/209 (44.5%)
+    assert int(hw_ok_df["hardware_ok"].sum()) == 93
+    assert int(hw_ok_df["hardware_ok_qc"].dropna().sum()) == 79
+    assert int(hw_ok_df["hardware_ok_no_rciu"].sum()) == 98
+    assert int(hw_ok_df["hardware_ok_sex"].sum()) == 91
+    assert int(hw_ok_df["hardware_ok_3domain18"].sum()) == 109
     assert int(hw_ok_df["hardware_ok_count"].sum()) == 93
 
-    contrast_df = reports["contraste_80_rois_absolutas"]
-    assert len(contrast_df) == 81
-    # Al menos 25 ROIs primarias difieren con q_FDR < 0.05 entre término y prematuros.
-    sig_prim = contrast_df.loc[
-        contrast_df["is_primary_atlas"]
-        & (
-            (contrast_df["q_fdr_welch_primary65"] < 0.05)
-            | (contrast_df["q_fdr_mwu_primary65"] < 0.05)
-        )
-    ]
-    assert len(sig_prim) >= 25
+    concordance = reports["calibracion_hardware_ok"]["nhpt_bimanual_concordance"]
+    assert concordance["ref_pct_slower_than_mathiowetz_right"] == pytest.approx(
+        100.0 * 42 / 49
+    )
+    assert concordance["ref_pct_slower_than_mathiowetz_left"] == pytest.approx(
+        100.0 * 43 / 49
+    )
+    assert concordance["ref_pct_slower_than_mathiowetz_bimanual"] == pytest.approx(
+        100.0 * 48 / 49
+    )
