@@ -63,6 +63,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-029](#dec-029--definición-operativa-de-grupos-comparables-y-retención-de-rciu-fenton-en-la-referencia) | Definición operativa de grupos comparables y retención de RCIU-Fenton en la referencia | Metodología | Aceptada |
 | [DEC-030](#dec-030--selección-de-estructuras-motoras-término-vs-prematuros-y-paradoja-del-dti-en-el-tracto-corticoespinal) | Selección de estructuras motoras Término vs. Prematuros y paradoja del DTI en el tracto corticoespinal | Metodología | Aceptada |
 | [DEC-031](#dec-031--definición-matemática-normativa-y-calibración-del-umbral-de-hardware_ok) | Definición matemática normativa y calibración del umbral de `hardware_ok` | Metodología | Aceptada |
+| [DEC-032](#dec-032--pesos-ipw-por-disponibilidad-de-resonancia-alcance-acotado-a-los-51-prematuros-sin-imagen) | Pesos IPW por disponibilidad de resonancia: alcance acotado a los 51 prematuros sin imagen | Metodología | Propuesta |
 
 ---
 
@@ -740,3 +741,20 @@ Como análisis de sensibilidad multimétrico (`SHORTLIST_3DOMAIN_18`, 18 métric
 
 **Consecuencias.** El Ticket #33 (`src/models/train_incremental.py`) dispone de un archivo limpio y tipado (`data/features/hardware_ok.parquet`) que permite entrenar modelos sobre $n = 209$ (`hardware_ok`) o $n = 168$ (`hardware_ok_qc`) y contrastar las sensibilidades sin RCIU (`hardware_ok_no_rciu`), estratificada por sexo (`hardware_ok_sex`), multimétrica (`hardware_ok_3domain18`) y por conteo (`hardware_ok_count`).
 
+---
+
+## DEC-032 — Pesos IPW por disponibilidad de resonancia: alcance acotado a los 51 prematuros sin imagen
+
+- **Fecha:** 2026-11-19 · **Autor:** María Paula Saa · **Estado:** Propuesta
+- **Contexto / issue:** ticket 5.1 (issue #32), rama `5.1-de-modelado-de-propensity-scores-y-ponderacion-ipw`
+
+**Decisión.** Se calculan pesos de probabilidad inversa (IPW) para corregir el posible sesgo de selección de los prematuros <1801 g del ECA que no tienen resonancia a los 20 años. La cohorte son los 264 prematuros <1801 g de los dos brazos (`clinical_imputed.parquet`); 213 tienen resonancia (están en `hw_motor.parquet` con ICV) y 51 no. La probabilidad de tener resonancia se estima con regresión logística regularizada sobre variables tempranas disponibles para toda la cohorte: peso y edad gestacional al nacer, sexo, las dos medidas de fragilidad y el brazo de intervención. Los pesos son estabilizados (P(resonancia) / P(resonancia | covariables)), se truncan en los percentiles 1 y 99 y valen 0 para quienes no tienen resonancia. El código está en `src/features/build_ipw.py`; exporta `data/features/ipw_mri.parquet` y `data/features/ipw_mri_report.json`.
+
+**Motivo.** Resultados: pesos entre 0.85 y 1.42, tamaño de muestra efectivo 210.6 de 213, y diferencia estandarizada de medias (SMD) máxima entre la cohorte completa y los que tienen resonancia de 0.060 sin pesos y 0.009 con pesos, por debajo del umbral de 0.1. Los pesos son casi planos porque los 51 sin resonancia ya se parecen a los demás en las variables incluidas (coherente con la comparación socioeconómica previa).
+
+**Alternativas descartadas.**
+- *Incluir las subescalas HOME como covariables*: el 37.6% de los sujetos tiene todo el bloque imputado, por lo que el modelo de selección se apoyaría en valores inventados.
+- *Pesos por pérdida de seguimiento desde el nacimiento (N = 716 a 441)*: no hay datos de los 275 perdidos; se documenta como trabajo futuro.
+- *Pesos sin truncar*: con pesos casi planos el truncamiento casi no cambia el resultado, pero protege contra valores extremos si cambian las covariables.
+
+**Consecuencias.** El criterio de balance (SMD < 0.1) se cumple, pero solo sobre las variables observadas: no se puede verificar que los 51 sin resonancia se parezcan a los demás en lo que no medimos, y por eso los pesos no descartan el sesgo de selección. Con pesos casi planos, el análisis ponderado (5.2) dará resultados muy parecidos al no ponderado; se reportan ambos. El 5.2 debe usar la columna `ipw` de `ipw_mri.parquet` unida por `code`.
