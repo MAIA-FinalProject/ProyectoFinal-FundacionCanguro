@@ -31,15 +31,21 @@ def make_data(n=264, seed=0):
     )
     # mayores de 1800 g del ECA: no deben entrar
     heavy = pd.DataFrame(
-        {"code": [9001, 9002], "ubicac": [1, 2], "lessthan1801g": [0, 0],
-         "peso": 2500, "edad_gest": 38, "sexo": 1}
+        {
+            "code": [9001, 9002],
+            "ubicac": [1, 2],
+            "lessthan1801g": [0, 0],
+            "peso": 2500,
+            "edad_gest": 38,
+            "sexo": 1,
+        }
     )
     clin = pd.concat([clin, heavy], ignore_index=True)
     # hw_motor solo tiene a quienes tienen resonancia (incluida referencia y >1800 g)
     codes = list(code[has]) + [9001, 7001]
-    hw = pd.DataFrame(
-        {"code": codes, "ubicac": 1, "lessthan1801g": 1, "icv": 1.5e6}
-    )
+    hw = pd.DataFrame({"code": codes, "ubicac": 1, "lessthan1801g": 1, "icv": 1.5e6})
+    hw["fit_sample"] = True
+    hw["hw_motor_qc"] = np.where(np.arange(len(hw)) % 5 == 0, np.nan, 0.1)
     return hw, clin
 
 
@@ -124,3 +130,28 @@ def test_run_writes_outputs(tmp_path):
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     assert report["n_cohorte"] == 264
     assert report["balance_ok"] is True
+    assert "submuestras" in report
+
+
+def test_default_paths_are_anchored_to_project_root():
+    assert ipw.HW_PATH.is_absolute()
+    assert ipw.OUT_PATH.parent.name == "features"
+    assert (ipw.PROJECT_ROOT / "src").is_dir()
+
+
+def test_early_covariates_exclude_home():
+    assert not any(c.lower().startswith("home") for c in ipw.EARLY_COVARIATES)
+
+
+def test_subsample_report_has_balance_and_arm_share():
+    hw, clin = make_data(seed=1)
+    cohort = ipw.build_cohort(hw, clin, COVS)
+    x = ipw.design_matrix(cohort, COVS)
+    p = ipw.fit_propensity(x, cohort["has_mri"])
+    w = ipw.stabilized_weights(p, cohort["has_mri"].to_numpy())
+    rep = ipw.subsample_report(cohort, x, w, hw)
+    assert set(rep) == {"fit_sample", "hw_motor_qc", "excluidos_qc"}
+    assert rep["excluidos_qc"]["n"] == rep["fit_sample"]["n"] - rep["hw_motor_qc"]["n"]
+    assert rep["hw_motor_qc"]["n"] < rep["fit_sample"]["n"]
+    assert 0 <= rep["fit_sample"]["pct_canguro"] <= 1
+    assert rep["fit_sample"]["smd_max_ponderado"] < 0.2

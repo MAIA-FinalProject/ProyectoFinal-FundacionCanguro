@@ -41,6 +41,7 @@ def test_default_steps_are_well_formed():
         "target_resiliencia",
         "hardware_ok",
         "imputacion",
+        "ipw",
     ]
     # El paso de ingesta ya existe en el repo (ticket 1.2)
     ingesta = pipeline.STEPS[0]
