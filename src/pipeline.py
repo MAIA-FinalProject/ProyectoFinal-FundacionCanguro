@@ -152,6 +152,21 @@ STEPS: tuple[Step, ...] = (
         ),
         hint="Corre antes la ingesta: uv run python -m src.pipeline --only ingesta",
     ),
+    Step(
+        name="ipw",
+        module="src.features.build_ipw",
+        script="src/features/build_ipw.py",
+        description="Pesos IPW por disponibilidad de resonancia (ticket 5.1)",
+        inputs=(
+            "data/features/hw_motor.parquet",
+            "data/processed/clinical_imputed.parquet",
+        ),
+        outputs=(
+            "data/features/ipw_mri.parquet",
+            "data/features/ipw_mri_report.json",
+        ),
+        hint="Corre antes los pasos hardware_motor e imputacion: uv run python -m src.pipeline",
+    ),
 )
 
 

@@ -207,6 +207,14 @@ uv run python -m src.pipeline --only imputacion   # equivalente, desde el orques
 - **El `.pkl` es un `Pipeline` de sklearn** (conversión HOME → MICE → total HOME), listo para la API. Para la validación cruzada del 3.2 usa `build_imputer()`, que devuelve el imputador sin ajustar; con `sample_posterior=True` y distintas semillas se obtienen imputaciones múltiples.
 - **El HOME de la base usa una codificación ±1 por ítem** (inferida, pendiente de confirmar con la Fundación, DEC-021). Si un valor no es compatible, el script falla en vez de convertirlo mal.
 
+### Pesos IPW por disponibilidad de resonancia (`src/features/build_ipw.py`)
+
+Estima la probabilidad de tener resonancia a los 20 años entre los 264 prematuros <1801 g del ECA y calcula pesos estabilizados y truncados (percentiles 1 y 99) para los 213 con imagen. Covariables: peso, edad gestacional, sexo, fragilidad y brazo (HOME queda fuera, ver DEC-032).
+
+    uv run python -m src.features.build_ipw
+
+Exporta `data/features/ipw_mri.parquet` (columna `ipw`, unir por `code`) y `data/features/ipw_mri_report.json` (pesos, tamaño de muestra efectivo, SMD antes y después de ponderar, balance en las submuestras de 209 y 168).
+
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 
 Un solo comando ejecuta en orden la ingesta (`load_data.py`) y los módulos de features (`build_hw.py`, `build_target.py`). Los pasos cuyo script todavía no existe se reportan como `PENDIENTE` y se omiten sin romper el flujo; con `--strict` fallan. El pipeline crea `data/interim`, `data/processed` y `data/features` si no existen, y se detiene en el primer paso que falle.
