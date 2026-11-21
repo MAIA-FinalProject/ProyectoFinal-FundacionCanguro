@@ -60,10 +60,18 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-026](#dec-026--el-volumen-del-tracto-corticoespinal-no-se-ajusta-por-icv) | El volumen del tracto corticoespinal no se ajusta por ICV | Metodología | Aceptada |
 | [DEC-027](#dec-027--nomenclatura-unificada-de-los-tractos-de-tracula) | Nomenclatura unificada de los tractos de Tracula | Datos | Propuesta (confirmar SLF izquierdo con la Fundación) |
 | [DEC-028](#dec-028--modelos-avanzados-con-validación-anidada-sin-mejora-frente-al-azar) | Modelos avanzados con validación anidada: sin mejora frente al baseline ni al azar | Metodología | Aceptada |
-| [DEC-029](#dec-029--definición-operativa-de-grupos-comparables-y-retención-de-rciu-fenton-en-la-referencia) | Definición operativa de grupos comparables y retención de RCIU-Fenton en la referencia | Metodología | Aceptada |
+| [DEC-029](#dec-029--definición-operativa-de-grupos-comparables-y-retención-de-rciu-fenton-en-la-referencia) | Definición operativa de grupos comparables y retención de RCIU-Fenton en la referencia | Metodología | Aceptada (RCIU-Fenton: reemplazado por DEC-040) |
 | [DEC-030](#dec-030--selección-de-estructuras-motoras-término-vs-prematuros-y-paradoja-del-dti-en-el-tracto-corticoespinal) | Selección de estructuras motoras Término vs. Prematuros y paradoja del DTI en el tracto corticoespinal | Metodología | Aceptada |
-| [DEC-031](#dec-031--definición-matemática-normativa-y-calibración-del-umbral-de-hardware_ok) | Definición matemática normativa y calibración del umbral de `hardware_ok` | Metodología | Aceptada |
+| [DEC-031](#dec-031--definición-matemática-normativa-y-calibración-del-umbral-de-hardware_ok) | Definición matemática normativa y calibración del umbral de `hardware_ok` | Metodología | Aceptada (cifras actualizadas en DEC-040) |
 | [DEC-032](#dec-032--pesos-ipw-por-disponibilidad-de-resonancia-alcance-acotado-a-los-51-prematuros-sin-imagen) | Pesos IPW por disponibilidad de resonancia: alcance acotado a los 51 prematuros sin imagen | Metodología | Propuesta |
+| [DEC-033](#dec-033--diseño-del-análisis-incremental-por-etapa-desenlaces-poblaciones-modelos-e-inferencia) | Diseño del análisis incremental por etapa: desenlaces, poblaciones, modelos e inferencia | Metodología | Aceptada |
+| [DEC-034](#dec-034--variables-por-etapa-del-desarrollo-temprano-lista-explícita-y-acumulativa) | Variables por etapa del desarrollo temprano (lista explícita y acumulativa) | Datos | Propuesta (validar con la Fundación) |
+| [DEC-035](#dec-035--imputación-por-etapa-stageimputer-umbral-de-faltantes-del-40-y-sensibilidad-por-mediana) | Imputación por etapa: `StageImputer`, umbral de faltantes del 40% y sensibilidad por mediana | Metodología | Aceptada |
+| [DEC-036](#dec-036--modelo-de-referencia-solo-perímetro-cefálico-por-etapa) | Modelo de referencia "solo perímetro cefálico" por etapa | Metodología | Aceptada |
+| [DEC-037](#dec-037--registro-de-experimentos-con-mlflow-local) | Registro de experimentos con MLflow local | Infraestructura | Aceptada |
+| [DEC-038](#dec-038--resultados-del-análisis-incremental-por-etapa-corrida-oficial) | Resultados del análisis incremental por etapa (corrida oficial) | Resultado | Aceptada (resultado) |
+| [DEC-039](#dec-039--análisis-exploratorio-post-hoc-desenlace-continuo-referencia-cabeza--sexo-y-modelo-parsimonioso) | Análisis exploratorio post hoc: desenlace continuo, referencia "cabeza + sexo" y modelo parsimonioso | Resultado | Aceptada (exploratorio) |
+| [DEC-040](#dec-040--la-referencia-a-término-excluye-a-los-rciu-fenton) | La referencia a término excluye a los RCIU-Fenton | Metodología | Aceptada |
 
 ---
 
@@ -671,7 +679,7 @@ En `NEO_ECN` y `NEO_ventilacion`, el valor −1 **no es un código de faltante**
 
 ## DEC-029 — Definición operativa de grupos comparables y retención de RCIU-Fenton en la referencia
 
-- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada
+- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada; la retención de RCIU-Fenton fue reemplazada por DEC-040
 - **Contexto / issue:** issue #31 (ticket 4.5); consolida DEC-003 y DEC-007
 
 **Decisión.** Para el contraste Término vs. Prematuros y la estandarización normativa de `hardware_ok` (`src/features/build_hardware_ok.py`), se definen dos cohortes comparables evaluadas a los 20 años:
@@ -717,7 +725,7 @@ Como análisis de sensibilidad multimétrico (`SHORTLIST_3DOMAIN_18`, 18 métric
 
 ## DEC-031 — Definición matemática normativa y calibración del umbral de `hardware_ok`
 
-- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada
+- **Fecha:** 2026-11-17 · **Autor:** Equipo MAIA · **Estado:** Aceptada; ancla y cifras actualizadas en DEC-040
 - **Contexto / issue:** issue #31 (ticket 4.5); habilita el ticket 5.2 (issue #33)
 
 **Decisión.** Se define el estado de preservación estructural motora (`hardware_ok`) sobre los 12 volúmenes motores de `SHORTLIST_CORE_VOL_12`, anclado directamente a la distribución del grupo de referencia a término con RM ($\mathcal{R}$, $n = 37$):
@@ -1047,3 +1055,23 @@ Si ningún criterio se cumple, la variante queda **probada y descartada**, se re
 4. Para la herramienta de predicción individual (fuera del alcance de este ticket), cabeza + sexo o el parsimonioso son candidatos más simples e igual de buenos que el clínico completo. La elección debe hacerse con datos nuevos o validación externa, no con estos mismos folds.
 
 Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `incrementos.csv`, `curva_exploratoria.png` y `meta.json`).
+
+---
+
+## DEC-040 — La referencia a término excluye a los RCIU-Fenton
+
+- **Fecha:** 2026-11-21 · **Autor:** Andrés Romero · **Estado:** Aceptada
+- **Contexto / issue:** ticket 5.1.5; reemplaza la parte de DEC-029 sobre la retención de RCIU-Fenton y actualiza el ancla de DEC-031
+
+**Decisión.** El grupo de referencia a término es `ubicac == 3` **sin** los 12 sujetos con `rciu_fenton_ref == True`: 38 con NHPT completo y 28 con resonancia. Esta referencia es el ancla principal en `build_hardware_ok.py` (función `reference_mask`) para la Tabla 1, `z_nhpt_ref`, el contraste de las 80 ROIs y `hw_norm_score` / `hardware_ok`, incluidas sus variantes por sexo, de 18 métricas y por conteo. La referencia completa (49 con NHPT y 37 con resonancia) queda como sensibilidad, con el sufijo `_ref_completa` (`hw_norm_score_ref_completa`, `hardware_ok_ref_completa`, `hedges_g_ref_completa`, `n_ref_completa`, `ref_completa_mean_or_pct`).
+
+**Motivo.** El Profesor Tiberio confirmó que los RCIU-Fenton deben excluirse: la referencia debe representar a nacidos a término sin restricción de crecimiento, y los 12 son los más livianos del grupo (DEC-029). DEC-029 ya mostraba que excluirlos casi no cambia los tamaños de efecto (r = 0.985 entre ambas versiones), así que el cambio afecta sobre todo al ancla normativa.
+
+**Alternativas descartadas.**
+- *Mantener la referencia completa como principal (DEC-029)*: contradice el criterio clínico confirmado; gana tamaño muestral a costa de incluir nacidos con restricción de crecimiento.
+
+**Consecuencias.**
+- `hardware_ok` principal: 98/209 (46.9 %) en `fit_sample` y 84/168 (50.0 %) en `qc_ok`, frente a 93/209 (44.5 %) y 79/168 (47.0 %) con la referencia completa. Las demás sensibilidades quedan en `reports/hardware_ok/calibracion_hardware_ok.json`.
+- `z_nhpt_ref` se estandariza contra 38 referencias en lugar de 49.
+- La normativa se estima con 28 referencias con resonancia, y menos aún por sexo en la variante estratificada, así que es menos estable; la referencia completa permite comprobar que las conclusiones no dependen de ello.
+- El 5.2 (PR #45) debe volver a correrse con la etiqueta corregida, y la pestaña poblacional (5.3) debe leer los reportes regenerados.

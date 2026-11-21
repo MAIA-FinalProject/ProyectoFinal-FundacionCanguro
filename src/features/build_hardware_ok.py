@@ -3,9 +3,10 @@
 Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico:
 
 1. **Grupos comparables, Tabla 1 y caracterización del NHPT (DEC-029):**
-   - Valida el grupo de referencia a término (``ubicac == 3``, EG >= 37 sem, peso >= 2500 g,
-     ``n = 49`` con NHPT completo y ``n = 37`` con RM/DTI) y evalúa el impacto de incluir vs.
-     excluir los 12 sujetos con ``rciu_fenton_ref == True`` (DEC-003).
+   - Define el grupo de referencia a término (``ubicac == 3``, EG >= 37 sem, peso >= 2500 g)
+     **sin** los 12 sujetos con ``rciu_fenton_ref == True`` (DEC-040: ``n = 38`` con NHPT
+     completo y ``n = 28`` con RM/DTI). La referencia completa (``n = 49`` y ``n = 37``) se
+     conserva como sensibilidad (sufijo ``_ref_completa``).
    - Compara contra el grupo de prematuros ``< 1801 g`` con RM y NHPT completos
      (``fit_sample == True``, DEC-007, ``n = 209``; y submuestra ``qc_ok == True``, ``n = 168``).
    - Caracteriza el NHPT (``NHPT_promedioMD``, ``NHPT_promedioMND`` y ``nhpt_mean``), su
@@ -19,7 +20,7 @@ Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico
      prematurez).
    - Calcula ``d`` de Cohen, ``g`` de Hedges (con IC 95%), ``delta`` de Cliff (con IC 95%),
      valores ``p`` de Welch y Mann-Whitney, ajuste FDR de Benjamini-Hochberg y sensibilidades
-     con ``qc_ok == True`` y sin RCIU-Fenton.
+     con ``qc_ok == True`` y con la referencia completa (incluye RCIU-Fenton).
 
 3. **Relación estructura-NHPT y definición normativa de ``hardware_ok`` (DEC-031):**
    - En prematuros, cuantifica la asociación entre las estructuras motoras seleccionadas
@@ -29,7 +30,7 @@ Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico
      sobre los 12 volúmenes motores (``SHORTLIST_CORE_VOL_12``) anclados a la mediana y MAD
      escalada del grupo de referencia a término (evitando la paradoja direccional del DTI por
      pérdida de fibras cruzadas en FA/RD), y exporta las sensibilidades ``hardware_ok_qc``,
-     ``hardware_ok_no_rciu``, ``hardware_ok_sex`` (normas estratificadas por sexo),
+     ``hardware_ok_ref_completa``, ``hardware_ok_sex`` (normas estratificadas por sexo),
      ``hardware_ok_3domain18`` (18 métricas incluyendo FA y RD) y ``hardware_ok_count``.
 
 4. **Salidas (sin filas individuales en reportes, DEC-001 / DEC-005):**
@@ -151,13 +152,13 @@ OUTPUT_COLS: list[str] = [
     "qc_ok",
     "hw_norm_score",
     "hw_norm_score_vol12",
-    "hw_norm_score_no_rciu",
+    "hw_norm_score_ref_completa",
     "hw_norm_score_sex",
     "hw_norm_score_3domain18",
     "n_impaired_structures",
     "hardware_ok",
     "hardware_ok_qc",
-    "hardware_ok_no_rciu",
+    "hardware_ok_ref_completa",
     "hardware_ok_sex",
     "hardware_ok_vol12",
     "hardware_ok_3domain18",
@@ -238,6 +239,14 @@ def cliffs_delta_with_ci(
     ci_low = float(np.clip(delta - 1.96 * se_d, -1.0, 1.0))
     ci_high = float(np.clip(delta + 1.96 * se_d, -1.0, 1.0))
     return delta, ci_low, ci_high
+
+
+def reference_mask(df: pd.DataFrame, include_rciu: bool = False) -> pd.Series:
+    """Referencia a término (``ubicac == 3``); por defecto sin RCIU-Fenton (DEC-040)."""
+    mask = df["ubicac"].eq(3)
+    if not include_rciu:
+        mask = mask & ~df["rciu_fenton_ref"].fillna(False).astype(bool)
+    return mask
 
 
 def _robust_standardize(values: pd.Series, ref_values: pd.Series) -> pd.Series:
@@ -359,8 +368,8 @@ def build_table1_summary(
     merged["qc_ok"] = merged["qc_ok"].fillna(False).astype(bool)
     merged["has_mri"] = merged["icv"].notna()
 
-    ref_mri = (merged["ubicac"] == 3) & merged["has_mri"]
-    ref_no_rciu = ref_mri & (~merged["rciu_fenton_ref"])
+    ref_mri = reference_mask(merged) & merged["has_mri"]
+    ref_full = reference_mask(merged, include_rciu=True) & merged["has_mri"]
     pre_fit = merged["fit_sample"]
     pre_qc = merged["fit_sample"] & merged["qc_ok"]
 
@@ -368,7 +377,7 @@ def build_table1_summary(
     for col in avail_cont:
         x_pre = merged.loc[pre_fit, col].dropna().to_numpy(dtype=float)
         y_ref = merged.loc[ref_mri, col].dropna().to_numpy(dtype=float)
-        y_norciu = merged.loc[ref_no_rciu, col].dropna().to_numpy(dtype=float)
+        y_full = merged.loc[ref_full, col].dropna().to_numpy(dtype=float)
         x_qc = merged.loc[pre_qc, col].dropna().to_numpy(dtype=float)
 
         _, g, ci_l, ci_h = hedges_g_with_ci(x_pre, y_ref)
@@ -397,9 +406,9 @@ def build_table1_summary(
                     if len(y_ref)
                     else np.nan
                 ),
-                "n_ref_no_rciu": len(y_norciu),
-                "ref_no_rciu_mean_or_pct": (
-                    float(np.mean(y_norciu)) if len(y_norciu) else np.nan
+                "n_ref_completa": len(y_full),
+                "ref_completa_mean_or_pct": (
+                    float(np.mean(y_full)) if len(y_full) else np.nan
                 ),
                 "n_preterm_fit": len(x_pre),
                 "preterm_fit_mean_or_pct": (
@@ -429,14 +438,12 @@ def build_table1_summary(
     for col in avail_cat:
         s_pre = merged.loc[pre_fit, col].dropna()
         s_ref = merged.loc[ref_mri, col].dropna()
-        s_norciu = merged.loc[ref_no_rciu, col].dropna()
+        s_full = merged.loc[ref_full, col].dropna()
         s_qc = merged.loc[pre_qc, col].dropna()
         levels = sorted(set(s_pre.unique()).union(set(s_ref.unique())))
         for lvl in levels:
             pct_ref = float(100.0 * (s_ref == lvl).mean()) if len(s_ref) else np.nan
-            pct_norciu = (
-                float(100.0 * (s_norciu == lvl).mean()) if len(s_norciu) else np.nan
-            )
+            pct_full = float(100.0 * (s_full == lvl).mean()) if len(s_full) else np.nan
             pct_pre = float(100.0 * (s_pre == lvl).mean()) if len(s_pre) else np.nan
             pct_qc = float(100.0 * (s_qc == lvl).mean()) if len(s_qc) else np.nan
             rows.append(
@@ -448,8 +455,8 @@ def build_table1_summary(
                     "ref_mri_sd": np.nan,
                     "ref_mri_median": np.nan,
                     "ref_mri_iqr": np.nan,
-                    "n_ref_no_rciu": len(s_norciu),
-                    "ref_no_rciu_mean_or_pct": pct_norciu,
+                    "n_ref_completa": len(s_full),
+                    "ref_completa_mean_or_pct": pct_full,
                     "n_preterm_fit": len(s_pre),
                     "preterm_fit_mean_or_pct": pct_pre,
                     "preterm_fit_sd": np.nan,
@@ -561,7 +568,7 @@ def characterize_nhpt(
     sub["fit_sample"] = sub["fit_sample"].fillna(False).astype(bool)
     sub["qc_ok"] = sub["qc_ok"].fillna(False).astype(bool)
 
-    ref_nhpt = sub.loc[(sub["ubicac"] == 3) & sub["nhpt_mean"].notna()]
+    ref_nhpt = sub.loc[reference_mask(sub) & sub["nhpt_mean"].notna()]
     if len(ref_nhpt) < 2:
         raise ValueError("No hay suficientes sujetos de referencia con NHPT completo.")
 
@@ -575,7 +582,7 @@ def characterize_nhpt(
     sub["z_nhpt_ref"] = -1.0 * _robust_standardize(
         sub["nhpt_mean"], ref_nhpt["nhpt_mean"]
     )
-    ref_nhpt = sub.loc[(sub["ubicac"] == 3) & sub["nhpt_mean"].notna()]
+    ref_nhpt = sub.loc[reference_mask(sub) & sub["nhpt_mean"].notna()]
 
     # Concordancia bimanual (MD vs MND) y resumen frente a Mathiowetz (1985) en referencia.
     both_valid = sub[list(NHPT_COLS)].dropna()
@@ -633,7 +640,7 @@ def characterize_nhpt(
 
     group_defs: dict[str, pd.Series] = {
         "referencia_total_nhpt": (sub["ubicac"] == 3) & sub["nhpt_mean"].notna(),
-        "referencia_mri_nhpt": (sub["ubicac"] == 3)
+        "referencia_mri_nhpt": reference_mask(sub)
         & sub["icv"].notna()
         & sub["nhpt_mean"].notna(),
         "referencia_sin_rciu": (sub["ubicac"] == 3)
@@ -761,12 +768,12 @@ def contrast_rois_term_vs_preterm(
     merged = hw_df.merge(rciu_map, on="code", how="left")
     merged["rciu_fenton_ref"] = merged["rciu_fenton_ref"].fillna(False).astype(bool)
 
-    ref_mask = merged["ubicac"] == 3
+    ref_mask = reference_mask(merged)
+    ref_full_mask = reference_mask(merged, include_rciu=True)
     pre_mask = merged["fit_sample"].eq(True)
     qc_mask = merged["qc_ok"].eq(True)
-    no_rciu_mask = ~merged["rciu_fenton_ref"]
 
-    if int((ref_mask & no_rciu_mask).sum()) < 2:
+    if int(ref_mask.sum()) < 2:
         raise ValueError(
             "La submuestra de referencia sin RCIU-Fenton tiene menos de 2 sujetos válidos."
         )
@@ -786,11 +793,9 @@ def contrast_rois_term_vs_preterm(
         y_qc = merged.loc[ref_mask & qc_mask, roi].dropna().to_numpy(dtype=float)
         _, g_qc, _, _ = hedges_g_with_ci(x_qc, y_qc)
 
-        # Sensibilidad 2: excluyendo los sujetos con RCIU-Fenton de la referencia
-        y_norciu = (
-            merged.loc[ref_mask & no_rciu_mask, roi].dropna().to_numpy(dtype=float)
-        )
-        _, g_no_rciu, _, _ = hedges_g_with_ci(x_pre, y_norciu)
+        # Sensibilidad 2: referencia completa (incluye los RCIU-Fenton)
+        y_full = merged.loc[ref_full_mask, roi].dropna().to_numpy(dtype=float)
+        _, g_ref_completa, _, _ = hedges_g_with_ci(x_pre, y_full)
 
         if roi == "icv":
             family = "icv"
@@ -832,7 +837,7 @@ def contrast_rois_term_vs_preterm(
                 "p_welch": float(p_welch),
                 "p_mwu": float(p_mwu),
                 "hedges_g_qc_ok": g_qc,
-                "hedges_g_no_rciu": g_no_rciu,
+                "hedges_g_ref_completa": g_ref_completa,
             }
         )
 
@@ -1090,8 +1095,9 @@ def compute_normative_hardware_ok(
     """Construye hardware_ok.parquet para fit_sample y la tabla agregada de calibración.
 
     El índice principal (`hw_norm_score` / `hardware_ok`) se calcula sobre los 12
-    volúmenes motores (`SHORTLIST_CORE_VOL_12`) anclados a la referencia a término.
-    Se exportan además las sensibilidades sin RCIU-Fenton (`hardware_ok_no_rciu`),
+    volúmenes motores (`SHORTLIST_CORE_VOL_12`) anclados a la referencia a término sin
+    RCIU-Fenton (DEC-040). Se exportan además las sensibilidades con la referencia
+    completa (`hardware_ok_ref_completa`),
     estratificada por sexo (`hardware_ok_sex`), multimétrica de 18 variables
     (`hardware_ok_3domain18`) y por conteo (`hardware_ok_count`).
     """
@@ -1109,16 +1115,16 @@ def compute_normative_hardware_ok(
     if missing:
         raise ValueError(f"Faltan columnas requeridas en merged_df: {missing}")
 
-    ref_mask = merged_df["ubicac"].eq(3) & merged_df["icv"].notna()
-    ref_no_rciu_mask = ref_mask & (
-        ~merged_df["rciu_fenton_ref"].fillna(False).astype(bool)
+    ref_mask = reference_mask(merged_df) & merged_df["icv"].notna()
+    ref_full_mask = (
+        reference_mask(merged_df, include_rciu=True) & merged_df["icv"].notna()
     )
-    if int(ref_no_rciu_mask.sum()) < 2:
+    if int(ref_mask.sum()) < 2:
         raise ValueError(
             "La submuestra de referencia sin RCIU-Fenton tiene menos de 2 sujetos válidos."
         )
 
-    # 1. Score normativo principal (12 volúmenes motores, referencia completa)
+    # 1. Score normativo principal (12 volúmenes motores, referencia sin RCIU-Fenton)
     score_main, z_main = _compute_reference_anchored_score(
         merged_df, ref_mask, components
     )
@@ -1131,9 +1137,9 @@ def compute_normative_hardware_ok(
             merged_df, ref_mask, SHORTLIST_CORE_VOL_12
         )
 
-    # 3. Sensibilidad anclada a referencia sin RCIU-Fenton (sobre components principal)
-    score_no_rciu, _ = _compute_reference_anchored_score(
-        merged_df, ref_no_rciu_mask, components
+    # 3. Sensibilidad anclada a la referencia completa, con RCIU-Fenton (components principal)
+    score_ref_completa, _ = _compute_reference_anchored_score(
+        merged_df, ref_full_mask, components
     )
 
     # 4. Sensibilidad con normas estratificadas por sexo (sobre SHORTLIST_CORE_VOL_12)
@@ -1152,15 +1158,15 @@ def compute_normative_hardware_ok(
     work = merged_df.copy()
     work["hw_norm_score"] = score_main
     work["hw_norm_score_vol12"] = score_vol12
-    work["hw_norm_score_no_rciu"] = score_no_rciu
+    work["hw_norm_score_ref_completa"] = score_ref_completa
     work["hw_norm_score_sex"] = score_sex
     work["hw_norm_score_3domain18"] = score_3domain18
     work["n_impaired_structures"] = n_impaired
 
     work["hardware_ok"] = _score_to_nullable_bool(work["hw_norm_score"], threshold)
     work["hardware_ok_qc"] = work["hardware_ok"].where(work["qc_ok"].eq(True), pd.NA)
-    work["hardware_ok_no_rciu"] = _score_to_nullable_bool(
-        work["hw_norm_score_no_rciu"], threshold
+    work["hardware_ok_ref_completa"] = _score_to_nullable_bool(
+        work["hw_norm_score_ref_completa"], threshold
     )
     work["hardware_ok_sex"] = _score_to_nullable_bool(
         work["hw_norm_score_sex"], threshold
@@ -1193,9 +1199,9 @@ def compute_normative_hardware_ok(
             qc_sub["hardware_ok"],
         ),
         (
-            "hardware_ok_no_rciu_vol12_ge_m1sd",
-            fit_out["hardware_ok_no_rciu"],
-            qc_sub["hardware_ok_no_rciu"],
+            "hardware_ok_ref_completa_vol12_ge_m1sd",
+            fit_out["hardware_ok_ref_completa"],
+            qc_sub["hardware_ok_ref_completa"],
         ),
         (
             "hardware_ok_sex_vol12_ge_m1sd",
