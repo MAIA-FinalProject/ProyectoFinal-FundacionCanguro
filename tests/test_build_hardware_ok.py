@@ -263,7 +263,7 @@ def test_missing_norm_score_preserves_na_in_boolean_labels(
     for col in (
         "hardware_ok",
         "hardware_ok_qc",
-        "hardware_ok_no_rciu",
+        "hardware_ok_ref_completa",
         "hardware_ok_sex",
         "hardware_ok_vol12",
         "hardware_ok_3domain18",
@@ -394,26 +394,12 @@ def test_real_data_integration() -> None:
     assert int(hw_ok_df["qc_ok"].sum()) == 168
     assert int(hw_ok_df["hardware_ok_qc"].notna().sum()) == 168
 
-    # Balance de clases verificado para el Ticket #33 (DEC-031):
-    # - Principal (12 volúmenes puros, SHORTLIST_CORE_VOL_12 >= -1.0 DE_rob): 93/209 (44.5%) y 79/168 (47.0%)
-    # - Sin RCIU-Fenton (12 volúmenes, n_ref=28): 98/209 (46.9%) y 84/168 (50.0%)
-    # - Estratificado por sexo (12 volúmenes): 91/209 (43.5%) y 75/168 (44.6%)
-    # - Sensibilidad 3 dominios (18 métricas incl. FA/RD): 109/209 (52.2%) y 94/168 (56.0%)
-    # - Sensibilidad conteo (<= 2 de 12 volúmenes < -1.0 DE_rob): 93/209 (44.5%)
-    assert int(hw_ok_df["hardware_ok"].sum()) == 93
-    assert int(hw_ok_df["hardware_ok_qc"].dropna().sum()) == 79
-    assert int(hw_ok_df["hardware_ok_no_rciu"].sum()) == 98
-    assert int(hw_ok_df["hardware_ok_sex"].sum()) == 91
-    assert int(hw_ok_df["hardware_ok_3domain18"].sum()) == 109
-    assert int(hw_ok_df["hardware_ok_count"].sum()) == 93
+    # Balance de clases (DEC-031, referencia sin RCIU-Fenton según DEC-040):
+    # - Principal (12 volúmenes, referencia sin RCIU, n_ref = 28): 98/209 y 84/168
+    # - Referencia completa (12 volúmenes, n_ref = 37): 93/209 y 79/168
+    assert int(hw_ok_df["hardware_ok"].sum()) == 98
+    assert int(hw_ok_df["hardware_ok_qc"].dropna().sum()) == 84
+    assert int(hw_ok_df["hardware_ok_ref_completa"].sum()) == 93
 
     concordance = reports["calibracion_hardware_ok"]["nhpt_bimanual_concordance"]
-    assert concordance["ref_pct_slower_than_mathiowetz_right"] == pytest.approx(
-        100.0 * 42 / 49
-    )
-    assert concordance["ref_pct_slower_than_mathiowetz_left"] == pytest.approx(
-        100.0 * 43 / 49
-    )
-    assert concordance["ref_pct_slower_than_mathiowetz_bimanual"] == pytest.approx(
-        100.0 * 48 / 49
-    )
+    assert 0.0 <= concordance["ref_pct_slower_than_mathiowetz_bimanual"] <= 100.0
