@@ -7,6 +7,8 @@ Ejecuta de extremo a extremo y en orden los módulos del pipeline:
 3. ``target_resiliencia`` -> ``src.features.build_target``     (ticket 2.2)
 4. ``hardware_ok``        -> ``src.features.build_hardware_ok`` (ticket 4.5)
 5. ``imputacion``         -> ``src.data.imputation``           (ticket 3.1)
+6. ``ipw``                -> ``src.features.build_ipw``        (ticket 5.1)
+7. ``modelo_incremental`` -> ``src.models.train_incremental``  (ticket 5.2)
 
 Cada paso se ejecuta como ``python -m <módulo>`` desde la raíz del repo, así que
 las rutas no dependen del directorio desde el que se lance el comando.
@@ -166,6 +168,29 @@ STEPS: tuple[Step, ...] = (
             "data/features/ipw_mri_report.json",
         ),
         hint="Corre antes los pasos hardware_motor e imputacion: uv run python -m src.pipeline",
+    ),
+    Step(
+        name="modelo_incremental",
+        module="src.models.train_incremental",
+        script="src/models/train_incremental.py",
+        description=(
+            "Capacidad predictiva incremental por etapa, configuración del informe "
+            "(ticket 5.2; ~3 h por las permutaciones)"
+        ),
+        args=("--sensitivity", "--permutations", "500"),
+        inputs=(
+            "data/interim/canguro.parquet",
+            "data/interim/tradicional.parquet",
+            "data/interim/referencia.parquet",
+            "data/features/hardware_ok.parquet",
+            "data/features/ipw_mri.parquet",
+        ),
+        outputs=(
+            "reports/incremental/tabla_por_etapa.csv",
+            "reports/incremental/incrementos.csv",
+            "reports/incremental/meta.json",
+        ),
+        hint="Corre antes los pasos hardware_ok e ipw: uv run python -m src.pipeline",
     ),
 )
 
