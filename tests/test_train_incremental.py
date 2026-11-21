@@ -102,6 +102,8 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path
         }
     )
     hok["hardware_ok_qc"] = hok["hardware_ok"].where(fit["code"] % 5 != 0)
+    hok["hardware_ok_sex"] = pd.array(fit["FOLL12M_pc12"] > 0.2, dtype="boolean")
+    hok["hardware_ok_ref_completa"] = hok["hardware_ok"]
     hok_path = tmp_path / "hardware_ok.parquet"
     hok.to_parquet(hok_path)
     ipw = pd.DataFrame({"code": eca["code"], "ipw": rng.uniform(0.8, 1.3, N)})
@@ -273,6 +275,46 @@ def test_nhpt_population_and_z_scores(workspace) -> None:
     assert ds.y.loc[0] == pytest.approx(-(raw - med) / scale)
 
 
+def test_nhpt_reference_excludes_rciu_fenton() -> None:
+    """La referencia del z sale de build_hardware_ok.reference_mask (DEC-040)."""
+    eca = pd.DataFrame(
+        {"code": [1], "NHPT_promedioMD": [20.0], "NHPT_promedioMND": [22.0]}
+    )
+    ref = pd.DataFrame(
+        {
+            "code": [10, 11, 12, 13, 14],
+            "ubicac": 3,
+            "NHPT_promedioMD": [17.0, 18.0, 19.0, 30.0, 31.0],
+            "NHPT_promedioMND": [19.0, 20.0, 21.0, 32.0, 33.0],
+            "rciu_fenton_ref": [0, 0, 0, 1, "true"],
+        }
+    )
+    z = ti.nhpt_z_scores(eca, ref).iloc[0]
+    clean = ref.iloc[:3][["NHPT_promedioMD", "NHPT_promedioMND"]].mean(axis=1)
+    scale = 1.4826 * (clean - clean.median()).abs().median()
+    assert z == pytest.approx(-(21.0 - clean.median()) / scale)
+    # Sin la columna, nadie es RCIU: se usa toda la referencia.
+    z_all = ti.nhpt_z_scores(eca, ref.drop(columns="rciu_fenton_ref")).iloc[0]
+    assert z_all != pytest.approx(z)
+
+
+def test_head_model_is_imputed_only_with_head_columns(workspace, monkeypatch) -> None:
+    seen: list[list[str]] = []
+    original = ti.impute_folds
+
+    def spy(X, *args, **kwargs):
+        seen.append(list(X.columns))
+        return original(X, *args, **kwargs)
+
+    monkeypatch.setattr(ti, "impute_folds", spy)
+    run_small(workspace, targets=["hardware_ok"], shap=False)
+    all_heads = set(st.head_features(st.STAGE_ORDER[-1]))
+    head_sets = [cols for cols in seen if set(cols) <= all_heads]
+    assert len(head_sets) == len(st.STAGE_ORDER)  # una imputación por etapa
+    for stage in st.STAGE_ORDER:
+        assert st.head_features(stage) in seen
+
+
 def test_hardware_ok_dataset_with_weights_and_missing_filter(workspace) -> None:
     ds = load(workspace, "hardware_ok")
     assert len(ds.y) == 90 and set(ds.y.unique()) == {0, 1}
@@ -384,6 +426,8 @@ def test_sensitivity_scenarios_and_weights(workspace) -> None:
     assert ("ipw", "hardware_ok") in names
     assert ("ipw", "nhpt") not in names  # sin pesos IPW en los 262
     assert ("submuestra_qc_ipw", "hardware_ok_qc") in names
+    assert ("etiqueta_sexo", "hardware_ok_sex") in names
+    assert ("etiqueta_ref_completa", "hardware_ok_ref_completa") in names
     assert sum(s.primary for s in ti.default_scenarios(sensitivity=True)) == 2
 
     scenarios = [
@@ -427,8 +471,11 @@ def test_real_populations() -> None:
     nhpt = ti.load_dataset("nhpt", ipw_path=Path("no-se-usa"))
     assert len(nhpt.y) == 262
     hok = ti.load_dataset("hardware_ok")
-    assert len(hok.y) == 209 and int(hok.y.sum()) == 93
-    assert int(ti.load_dataset("hardware_ok_qc").y.sum()) == 79
+    # Referencia sin RCIU-Fenton (DEC-040); con la referencia completa, 93.
+    assert len(hok.y) == 209 and int(hok.y.sum()) == 98
+    assert int(ti.load_dataset("hardware_ok_qc").y.sum()) == 84
+    assert int(ti.load_dataset("hardware_ok_sex").y.sum()) == 79
+    assert int(ti.load_dataset("hardware_ok_ref_completa").y.sum()) == 93
     assert not hok.dropped  # ninguna variable supera el 40% de faltantes
 
 

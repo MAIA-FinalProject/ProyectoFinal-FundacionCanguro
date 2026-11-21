@@ -81,7 +81,11 @@ def test_end_to_end_criteria_and_reproduction(workspace, tmp_path) -> None:  # n
         base_table=workspace["reports"] / "tabla_por_etapa.csv",
     )
     table, inc = out["table"], out["increments"]
-    assert len(table) == 2 * len(st.STAGE_ORDER) * len(ex.MODELS)
+    assert len(table) == 3 * len(st.STAGE_ORDER) * len(ex.MODELS)
+    # E3 (etiqueta por sexo) es descriptivo: no entra al Holm ni a los criterios.
+    e3 = inc[inc["experimento"] == "E3"]
+    assert set(e3["criterio"]) == {"3_etiqueta_sexo"}
+    assert e3["p_holm"].isna().all() and not e3["exito"].any()
     assert table.loc[table["experimento"] == "E1", "r2_media"].notna().all()
     # El clínico del E2 reproduce (salvo redondeo) el principal de DEC-038.
     assert (

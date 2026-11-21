@@ -217,7 +217,7 @@ Exporta `data/features/ipw_mri.parquet` (columna `ipw`, unir por `code`) y `data
 
 ### Capacidad predictiva incremental por etapa (`src/models/train_incremental.py`)
 
-Evalúa si las variables clínicas acumuladas por etapa (nacimiento, 40 semanas, 3, 6, 9 y 12 meses de edad corregida) predicen dos desenlaces a los 20 años: el NHPT estandarizado contra la referencia (`z_nhpt_ref`, n = 262) y `hardware_ok` (n = 209). Las decisiones están en DEC-033 a DEC-037, los resultados en DEC-038 y el análisis exploratorio en DEC-039 (el mapeo de etapas, DEC-034, es una propuesta para validar con la Fundación).
+Evalúa si las variables clínicas acumuladas por etapa (nacimiento, 40 semanas, 3, 6, 9 y 12 meses de edad corregida) predicen dos desenlaces a los 20 años: el NHPT estandarizado contra la referencia (`z_nhpt_ref`, n = 262) y `hardware_ok` (n = 209). Las decisiones están en DEC-033 a DEC-037, los resultados en DEC-038, el análisis exploratorio en DEC-039 y los ajustes tras la revisión del PR (etiqueta sin RCIU-Fenton de DEC-040, imputación por modelo y sensibilidad con normas por sexo) en DEC-041 (el mapeo de etapas, DEC-034, es una propuesta para validar con la Fundación).
 
 ```bash
 uv run python -m src.models.train_incremental                  # principal, rápido (~10 min)
@@ -232,7 +232,7 @@ uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db  # comparar corr
 | **Salida** | `reports/incremental/`: `tabla_por_etapa.csv`, `incrementos.csv`, `curva_<desenlace>.png`, `meta.json` y, si alguna etapa supera al azar, `shap_<desenlace>_<etapa>.csv/.png` |
 | **Modelos** | `modelos/incremental_<desenlace>_<etapa>.pkl` (solo etapas que superan al azar) |
 
-- **Validación cruzada anidada** (5 × 5 externa, 3 interna) con los mismos folds en todas las etapas. El imputador (`StageImputer`, en `imputation.py`) se ajusta dentro de cada fold y solo con las variables de la etapa.
+- **Validación cruzada anidada** (5 × 5 externa, 3 interna) con los mismos folds en todas las etapas. El imputador (`StageImputer`, en `imputation.py`) se ajusta dentro de cada fold y solo con las columnas de cada modelo: el modelo clínico con las de la etapa y la referencia con los perímetros (DEC-041).
 - **Modelo principal fijado de antemano** (elastic net para `hardware_ok`, Huber para el NHPT); el resto de familias, la imputación por mediana, los pesos IPW y las submuestras (`--sensitivity`) son sensibilidad.
 - **Modelo de referencia "solo perímetro cefálico"** en cada etapa: el aporte clínico se mide por encima del tamaño de la cabeza.
 - **"Supera al azar"** = p ajustado por Holm < 0.05 (12 pruebas principales) y límite inferior del IC 95% (Nadeau-Bengio) sobre el azar.
@@ -241,11 +241,12 @@ uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db  # comparar corr
 
 **Resultados (DEC-038).**
 - **NHPT:** no hay capacidad predictiva en ninguna etapa (R² ≤ 0).
-- **`hardware_ok`:** supera al azar desde el nacimiento (AUC 0.70) hasta los 12 meses (0.75), pero el aporte sobre el perímetro cefálico no es significativo.
+- **`hardware_ok`** (98/209): supera al azar desde el nacimiento (AUC 0.70) hasta los 12 meses (0.77). Desde los 3 meses el aporte sobre el perímetro cefálico no es significativo, y el del nacimiento (+0.09) es el sexo (DEC-039).
+- **Sensibilidades:** las conclusiones se mantienen con otras familias, imputación por mediana, IPW, `qc_ok` y la etiqueta anterior (`etiqueta_ref_completa`). Con normas por sexo (`etiqueta_sexo`), el AUC baja a 0.58–0.69 y el clínico ya no supera a solo cabeza.
 
 #### Exploratorio post hoc (`src/models/explore_incremental.py`, DEC-039)
 
-Tres variantes, fijadas antes de correrlas y evaluadas con los mismos folds que DEC-038:
+Tres variantes más un experimento descriptivo con normas por sexo (E3, DEC-041), fijados antes de correrlos y evaluadas con los mismos folds que DEC-038:
 - una referencia "perímetro + sexo";
 - el desenlace continuo `hw_norm_score`;
 - un modelo parsimonioso: perímetro + sexo + 10 variables clínicas elegidas por criterio clínico.
@@ -255,10 +256,11 @@ uv run python -m src.models.explore_incremental   # ~35 min; salida en reports/i
 ```
 
 **Para quien continúe (p. ej., el ticket de la herramienta de predicción):**
-- **El predictor real es perímetro cefálico + sexo.** Con solo esas dos variables se logra AUC 0.71 al nacer y 0.76 a los 12 meses. La aparente ganancia clínica temprana de DEC-038 era el sexo. Ninguna variable clínica adicional mostró aporte significativo (24 pruebas, p Holm = 1.0).
+- **El predictor real es perímetro cefálico + sexo.** Con solo esas dos variables se logra AUC 0.72 al nacer y 0.76 a los 12 meses. La aparente ganancia clínica temprana de DEC-038 era el sexo. Ninguna variable clínica adicional mostró aporte significativo (24 pruebas, p Holm ≥ 0.95).
+- **El sexo entra por la etiqueta.** Con `hardware_ok_sex` (normas por sexo, E3) agregar el sexo no aporta nada (Δ ≈ 0) y el AUC cae a ≈ 0.68. Antes de construir la herramienta hay que decidir con el equipo qué etiqueta es la principal; el análisis por ICV (5.6) ataca la misma pregunta.
 - **Dos señales consistentes, pero no significativas, que conviene validar con datos nuevos:**
-  - entrenar con `hw_norm_score` continuo mejora el AUC de 0.02 a 0.03 en todas las etapas;
-  - el modelo parsimonioso (`PARSIMONIOUS_VARIABLES`) llega a AUC ≈ 0.79 entre los 6 y los 12 meses con 13 a 17 variables.
+  - entrenar con `hw_norm_score` continuo da un AUC igual o algo mayor en todas las etapas (hasta +0.03);
+  - el modelo parsimonioso (`PARSIMONIOUS_VARIABLES`) llega a AUC ≈ 0.79–0.80 entre los 6 y los 12 meses con 13 a 17 variables.
 - **No hay que elegir el modelo final comparando más variantes con estos mismos 209 sujetos**, porque se sobreajusta la validación. Cualquier variante nueva debe registrarse en `docs/decisiones.md` antes de correrla, como DEC-039.
 - **`hardware_ok` usa volúmenes absolutos**, así que en parte mide "cerebro grande" (DEC-036). Eso explica el peso del perímetro y del sexo, y debe explicarse junto a cualquier predicción.
 

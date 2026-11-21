@@ -9,6 +9,11 @@ Prueba tres variantes fijadas ANTES de correrlas, sin tocar el análisis princip
   comparable con DEC-038.
 * **E2**: modelo ``parsimonioso`` (cabeza + sexo + una lista clínica fija),
   con regresión logística L2 para ``hardware_ok``.
+* **E3** (revisión del PR, DEC-041): los mismos cuatro modelos con la etiqueta
+  ``hardware_ok_sex`` (normas por sexo). Es solo descriptivo: indica si el aporte
+  del sexo es en parte un artefacto de la etiqueta principal.
+
+Cada modelo se imputa solo con sus propias columnas (DEC-041).
 
 Se usan los mismos 209 sujetos, folds (5×5 estratificados por ``hardware_ok``,
 semilla 42) e imputación por fold que DEC-038, así que el modelo ``clinico`` del
@@ -59,6 +64,7 @@ REPORTS_DIR = ti.REPORTS_DIR / "exploratorio"
 BASE_TABLE = ti.REPORTS_DIR / "tabla_por_etapa.csv"
 SCORE_COL = "hw_norm_score"
 SEX_COL = "BIRTH_sexo5"
+SEX_LABEL = "hardware_ok_sex"  # normas estratificadas por sexo (DEC-031)
 
 HEAD = ti.HEAD  # "solo_cabeza"
 HEAD_SEX = "cabeza_sexo"
@@ -102,7 +108,22 @@ EXPERIMENTS: dict[str, dict[str, Any]] = {
         "metric": "r2",
         "family": dict.fromkeys(MODELS, "huber"),
     },
+    # Sensibilidad de revisión (DEC-041): etiqueta con normas por sexo. Si el aporte
+    # del sexo desaparece aquí, era en parte un artefacto de la etiqueta principal.
+    "E3": {
+        "desenlace": SEX_LABEL,
+        "task": "clf",
+        "metric": "roc_auc",
+        "family": {
+            HEAD: "enet",
+            HEAD_SEX: "enet",
+            PARSIMONIOUS: "ridge",
+            CLINICAL: "enet",
+        },
+    },
 }
+PREREGISTERED = ("E2", "E1")  # criterios 1 y 2 de DEC-039
+ALL_EXPERIMENTS = ("E2", "E1", "E3")
 RIDGE_CS = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0]
 MIN_AUC_GAIN = 0.02  # criterio 2 de DEC-039
 
@@ -142,15 +163,20 @@ def model_columns(dataset: ti.Dataset, stage: str, model: str) -> list[str]:
     return [c for c in dict.fromkeys(model_features(stage, model)) if c in available]
 
 
+def load_column(dataset: ti.Dataset, hardware_ok_path: Path, column: str) -> pd.Series:
+    """Una columna de ``hardware_ok.parquet`` alineada con los sujetos del 5.2."""
+    hok = pd.read_parquet(hardware_ok_path).set_index("code")
+    if column not in hok.columns:
+        raise ValueError(f"{hardware_ok_path} no tiene {column}")
+    values = hok[column].reindex(dataset.y.index).astype(float)
+    if values.isna().any():
+        raise ValueError(f"Falta {column} para {int(values.isna().sum())} sujetos")
+    return values
+
+
 def load_score(dataset: ti.Dataset, hardware_ok_path: Path) -> pd.Series:
     """``hw_norm_score`` alineado con los sujetos de ``hardware_ok``."""
-    hok = pd.read_parquet(hardware_ok_path).set_index("code")
-    if SCORE_COL not in hok.columns:
-        raise ValueError(f"{hardware_ok_path} no tiene {SCORE_COL}")
-    score = hok[SCORE_COL].reindex(dataset.y.index).astype(float)
-    if score.isna().any():
-        raise ValueError(f"Falta {SCORE_COL} para {int(score.isna().sum())} sujetos")
-    return score
+    return load_column(dataset, hardware_ok_path, SCORE_COL)
 
 
 # --------------------------------------------------------------------------- #
@@ -213,21 +239,35 @@ def evaluate(
     *,
     seed: int,
     n_jobs: int,
-    experiments: Sequence[str] = ("E2", "E1"),
+    experiments: Sequence[str] = ALL_EXPERIMENTS,
+    sex_label: pd.Series | None = None,
 ) -> list[ExpResult]:
-    """Todos los experimentos × etapas × modelos con los mismos folds imputados."""
+    """Todos los experimentos × etapas × modelos con los mismos folds.
+
+    Cada modelo se imputa SOLO con sus columnas (DEC-041): las referencias no
+    reciben información clínica por la imputación. Los folds imputados se
+    reutilizan entre experimentos porque la imputación no usa el desenlace.
+    """
     label = dataset.y.to_numpy()
     targets = {"hardware_ok": label, SCORE_COL: score.to_numpy()}
+    if sex_label is not None:
+        targets[SEX_LABEL] = sex_label.to_numpy().astype(int)
     results: list[ExpResult] = []
     for stage in st.STAGE_ORDER:
-        folds = ti.impute_folds(
-            dataset.X[ti.stage_columns(dataset, stage)], splits, "mice", seed, n_jobs
-        )
+        cache: dict[tuple[str, ...], list[ti.Fold]] = {}
         for exp in experiments:
             spec = EXPERIMENTS[exp]
+            if spec["desenlace"] not in targets:
+                raise ValueError(f"{exp}: falta el desenlace {spec['desenlace']}")
             y = targets[spec["desenlace"]]
             for model in MODELS:
                 cols = model_columns(dataset, stage, model)
+                key = tuple(cols)
+                if key not in cache:
+                    cache[key] = ti.impute_folds(
+                        dataset.X[cols], splits, "mice", seed, n_jobs
+                    )
+                folds = cache[key]
                 family = spec["family"][model]
                 start = time.perf_counter()
                 rows = Parallel(n_jobs=n_jobs)(
@@ -308,7 +348,14 @@ def summarize(
         )
 
     for stage in st.STAGE_ORDER:
-        for exp in EXPERIMENTS:
+        # Sensibilidad de etiqueta (E3): solo descriptiva, fuera de los criterios.
+        for model, ref in (
+            (HEAD_SEX, HEAD),
+            (PARSIMONIOUS, HEAD_SEX),
+            (CLINICAL, HEAD_SEX),
+        ):
+            add("3_etiqueta_sexo", "E3", stage, model, ("E3", stage, ref), "roc_auc")
+        for exp in PREREGISTERED:
             m = EXPERIMENTS[exp]["metric"]
             # Criterio 1: aporte clínico sobre cabeza + sexo.
             for model in (CLINICAL, PARSIMONIOUS):
@@ -382,6 +429,7 @@ LABELS = {
 TITLES = {
     "E2": "E2 · hardware_ok binario",
     "E1": "E1 · hw_norm_score continuo (AUC del puntaje)",
+    "E3": "E3 · hardware_ok_sex (normas por sexo)",
 }
 
 
@@ -466,7 +514,7 @@ def run(
     n_repeats: int = 5,
     seed: int = ti.RANDOM_STATE,
     n_jobs: int = -1,
-    experiments: Sequence[str] = ("E2", "E1"),
+    experiments: Sequence[str] = ALL_EXPERIMENTS,
     interim_dir: Path = INTERIM_DIR,
     hardware_ok_path: Path = ti.HARDWARE_OK_PATH,
     ipw_path: Path = ti.IPW_PATH,
@@ -481,11 +529,22 @@ def run(
         ipw_path=ipw_path,  # se carga pero no se usa (sin ponderar)
     )
     score = load_score(dataset, hardware_ok_path)
+    sex_label = (
+        load_column(dataset, hardware_ok_path, SEX_LABEL)
+        if "E3" in experiments
+        else None
+    )
     splits = ti.outer_splits("clf", dataset.y.to_numpy(), n_splits, n_repeats, seed)
     logger.info("hardware_ok: n=%d, %d positivos", len(dataset.y), int(dataset.y.sum()))
 
     results = evaluate(
-        dataset, score, splits, seed=seed, n_jobs=n_jobs, experiments=experiments
+        dataset,
+        score,
+        splits,
+        seed=seed,
+        n_jobs=n_jobs,
+        experiments=experiments,
+        sex_label=sex_label,
     )
     table, increments = summarize(results, n_splits)
     repro = reproduction_check(table, base_table)
@@ -566,7 +625,10 @@ def format_report(table: pd.DataFrame, increments: pd.DataFrame) -> str:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Exploratorio post hoc del 5.2 (DEC-039)")
     p.add_argument(
-        "--experiments", nargs="+", default=["E2", "E1"], choices=["E2", "E1"]
+        "--experiments",
+        nargs="+",
+        default=list(ALL_EXPERIMENTS),
+        choices=list(ALL_EXPERIMENTS),
     )
     p.add_argument("--n-splits", type=int, default=5)
     p.add_argument("--n-repeats", type=int, default=5)

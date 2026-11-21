@@ -99,7 +99,7 @@ from src.data.imputation import (
     home_total_standard,
     load_cohorts,
 )
-from src.features.build_hardware_ok import NHPT_COLS
+from src.features.build_hardware_ok import NHPT_COLS, reference_mask, with_rciu_flag
 from src.features.build_hardware_ok import _robust_standardize as robust_standardize
 from src.models import stages as st
 from src.models.train_advanced import chance_margin
@@ -147,6 +147,17 @@ TARGETS: dict[str, TargetSpec] = {
     ),
     "hardware_ok_qc": TargetSpec(
         "hardware_ok_qc", "clf", "hardware_ok_qc", "fit_sample con qc_ok", True
+    ),
+    # Sensibilidades de la etiqueta (DEC-041): normas por sexo y referencia completa.
+    "hardware_ok_sex": TargetSpec(
+        "hardware_ok_sex", "clf", "hardware_ok_sex", "fit_sample, normas por sexo", True
+    ),
+    "hardware_ok_ref_completa": TargetSpec(
+        "hardware_ok_ref_completa",
+        "clf",
+        "hardware_ok_ref_completa",
+        "fit_sample, referencia con RCIU-Fenton",
+        True,
     ),
     "nhpt_mri": TargetSpec(
         "nhpt_mri", "reg", "z_nhpt_ref", "fit_sample (con resonancia)", True
@@ -226,6 +237,8 @@ def default_scenarios(
         out += [
             Scenario("submuestra_qc", "hardware_ok_qc", "enet"),
             Scenario("submuestra_qc_ipw", "hardware_ok_qc", "enet", weighted=True),
+            Scenario("etiqueta_sexo", "hardware_ok_sex", "enet"),
+            Scenario("etiqueta_ref_completa", "hardware_ok_ref_completa", "enet"),
         ]
     if sensitivity and "nhpt" in targets:
         out += [
@@ -259,17 +272,20 @@ def build_feature_table(eca: pd.DataFrame) -> pd.DataFrame:
 
 
 def nhpt_z_scores(eca: pd.DataFrame, reference: pd.DataFrame) -> pd.Series:
-    """``z_nhpt_ref`` de los sujetos del ECA con NHPT en ambas manos (DEC-029).
+    """``z_nhpt_ref`` de los sujetos del ECA con NHPT en ambas manos.
 
-    Misma definición que el ticket 4.5: promedio bimanual estandarizado con la
-    mediana y la MAD escalada de la referencia a término, con el signo invertido.
+    Misma definición que ``build_hardware_ok.characterize_nhpt``: promedio bimanual
+    estandarizado con la mediana y la MAD escalada de la referencia a término, con
+    el signo invertido. La referencia se toma con ``reference_mask`` del mismo
+    módulo (sin RCIU-Fenton, DEC-040), así que hay una sola definición.
     """
 
     def bimanual(df: pd.DataFrame) -> pd.Series:
         values = df[list(NHPT_COLS)].apply(pd.to_numeric, errors="coerce")
         return values.mean(axis=1, skipna=False)
 
-    ref = bimanual(reference)
+    reference = with_rciu_flag(reference)
+    ref = bimanual(reference[reference_mask(reference)])
     eca_mean = bimanual(eca)
     z = -1.0 * robust_standardize(eca_mean, ref)
     return pd.Series(z.to_numpy(), index=eca["code"].to_numpy(), name="z_nhpt_ref")
@@ -648,7 +664,7 @@ def run_scenario(
     scenario: Scenario,
     dataset: Dataset,
     splits: Sequence[Split],
-    fold_cache: dict[tuple[str, str], list[Fold]],
+    fold_cache: dict[tuple[str, str, str], list[Fold]],
     *,
     n_splits: int,
     permutations: int,
@@ -667,17 +683,18 @@ def run_scenario(
 
     results: list[StageResult] = []
     for stage in st.STAGE_ORDER:
-        key = (scenario.imputation, stage)
-        if key not in fold_cache:
-            cols = stage_columns(dataset, stage)
-            fold_cache[key] = impute_folds(
-                dataset.X[cols], splits, scenario.imputation, seed, n_jobs
-            )
-        folds = fold_cache[key]
         for model in (CLINICAL, HEAD):
             cols = stage_columns(dataset, stage, model)
             if not cols:
                 continue
+            # Cada modelo se imputa SOLO con sus columnas: la referencia "solo
+            # cabeza" no debe recibir información clínica por la imputación.
+            key = (scenario.imputation, stage, model)
+            if key not in fold_cache:
+                fold_cache[key] = impute_folds(
+                    dataset.X[cols], splits, scenario.imputation, seed, n_jobs
+                )
+            folds = fold_cache[key]
             start = time.perf_counter()
             scores = cross_validate_stage(
                 task, scenario.family, folds, splits, y, w, cols, seed, n_jobs
@@ -1168,7 +1185,7 @@ def run(
 
     datasets: dict[str, Dataset] = {}
     splits: dict[str, list[Split]] = {}
-    caches: dict[str, dict[tuple[str, str], list[Fold]]] = {}
+    caches: dict[str, dict[tuple[str, str, str], list[Fold]]] = {}
     results: list[StageResult] = []
     for scenario in chosen:
         name = scenario.target

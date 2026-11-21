@@ -72,6 +72,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-038](#dec-038--resultados-del-análisis-incremental-por-etapa-corrida-oficial) | Resultados del análisis incremental por etapa (corrida oficial) | Resultado | Aceptada (resultado) |
 | [DEC-039](#dec-039--análisis-exploratorio-post-hoc-desenlace-continuo-referencia-cabeza--sexo-y-modelo-parsimonioso) | Análisis exploratorio post hoc: desenlace continuo, referencia "cabeza + sexo" y modelo parsimonioso | Resultado | Aceptada (exploratorio) |
 | [DEC-040](#dec-040--la-referencia-a-término-excluye-a-los-rciu-fenton) | La referencia a término excluye a los RCIU-Fenton | Metodología | Aceptada |
+| [DEC-041](#dec-041--ajustes-del-52-tras-la-revisión-del-pr-y-la-nueva-referencia-dec-040) | Ajustes del 5.2 tras la revisión del PR y la nueva referencia (DEC-040) | Metodología | Aceptada |
 
 ---
 
@@ -926,47 +927,51 @@ Sin este modelo de referencia, una etapa "significativa" podría leerse como "la
 
 ## DEC-038 — Resultados del análisis incremental por etapa (corrida oficial)
 
-- **Fecha:** 2026-11-20 · **Autor:** Martín Quintero · **Estado:** Aceptada (resultado)
-- **Contexto / issue:** ticket 5.2 (issue #33). Aplica DEC-033 a DEC-037 sin cambios después de ver resultados.
+- **Fecha:** 2026-11-20, actualizada el 2026-11-21 tras DEC-040/DEC-041 · **Autor:** Martín Quintero · **Estado:** Aceptada (resultado)
+- **Contexto / issue:** ticket 5.2 (issue #33). Aplica DEC-033 a DEC-037 sin cambios después de ver resultados, con los ajustes prerregistrados en DEC-041 (etiqueta sin RCIU-Fenton, una sola fuente para `z_nhpt_ref` e imputación por modelo). Las cifras de la primera corrida (etiqueta 93/209) quedan en el historial de git y se reproducen en la sensibilidad `etiqueta_ref_completa`.
 
 **Corrida.** `uv run python -m src.models.train_incremental --sensitivity --permutations 500 --mlflow`: CV anidada 5×5 (semilla 42), 500 permutaciones y Holm sobre las 12 pruebas primarias. Los reportes están en `reports/incremental/` (`tabla_por_etapa.csv`, `incrementos.csv`, `curva_*.png`, `shap_hardware_ok_*.csv/png` y `meta.json`). Solo contienen métricas agregadas e importancias globales; no hay datos por sujeto.
 
 **Resultado 1 — NHPT (`z_nhpt_ref`, n = 262): sin capacidad predictiva en ninguna etapa.**
-- El R² fuera de muestra del modelo clínico (Huber) va de −0.046 a −0.077, con todos los IC conteniendo 0 y p Holm = 0.97.
-- El modelo de solo perímetro cefálico queda en R² ≈ 0 (−0.027 a −0.001).
+- El R² fuera de muestra del modelo clínico (Huber) va de −0.076 a −0.046, con todos los IC conteniendo 0 y p Holm = 0.97.
+- El modelo de solo perímetro cefálico queda en R² ≈ 0 (−0.033 a −0.003).
 - Las sensibilidades no cambian la conclusión:
   - elastic net: R² −0.031 a −0.010;
   - HGB: −0.108 a −0.051;
   - imputación por mediana: −0.139 a −0.067;
-  - submuestra con resonancia, n = 209, con y sin IPW: −0.059 a −0.009.
-- Interpretación: con las variables clínicas de los primeros 12 meses no es posible predecir la destreza manual fina a los 20 años mejor que la media. Es un hallazgo nulo robusto y se reporta como tal.
+  - submuestra con resonancia, n = 209, con y sin IPW: −0.058 a −0.009.
+- Interpretación: con las variables clínicas de los primeros 12 meses no es posible predecir la destreza manual fina a los 20 años mejor que la media. Es un hallazgo nulo robusto y se reporta como tal. Cambiar la referencia del z (38 sujetos en lugar de 49) no lo altera.
 
-**Resultado 2 — `hardware_ok` (n = 209, 93 positivos): las 6 etapas superan el azar.**
+**Resultado 2 — `hardware_ok` (n = 209, 98 positivos): las 6 etapas superan el azar.**
 
 | Etapa | AUC clínico [IC 95% NB] | AUC solo cabeza | Δ vs solo cabeza [IC] | Δ vs etapa anterior [IC] |
 |---|---|---|---|---|
-| Nacimiento | 0.698 [0.623, 0.774] | 0.607 | +0.091 [−0.016, 0.199] | — |
-| 40 semanas | 0.690 [0.610, 0.769] | 0.613 | +0.077 [−0.036, 0.190] | −0.009 [−0.082, 0.065] |
-| 3 meses | 0.734 [0.658, 0.811] | 0.712 | +0.022 [−0.069, 0.114] | +0.044 [−0.008, 0.097] |
-| 6 meses | 0.752 [0.689, 0.816] | 0.745 | +0.007 [−0.064, 0.078] | +0.018 [−0.035, 0.071] |
-| 9 meses | 0.751 [0.687, 0.815] | 0.741 | +0.010 [−0.066, 0.085] | −0.002 [−0.037, 0.034] |
-| 12 meses | 0.755 [0.690, 0.820] | 0.730 | +0.025 [−0.050, 0.099] | +0.004 [−0.028, 0.036] |
+| Nacimiento | 0.703 [0.631, 0.775] | 0.611 | +0.092 [0.016, 0.168] | — |
+| 40 semanas | 0.685 [0.605, 0.766] | 0.617 | +0.068 [−0.018, 0.154] | −0.018 [−0.088, 0.053] |
+| 3 meses | 0.746 [0.668, 0.823] | 0.712 | +0.034 [−0.015, 0.083] | +0.060 [0.014, 0.107] |
+| 6 meses | 0.756 [0.674, 0.838] | 0.736 | +0.020 [−0.034, 0.074] | +0.010 [−0.039, 0.060] |
+| 9 meses | 0.768 [0.687, 0.849] | 0.746 | +0.022 [−0.030, 0.074] | +0.012 [−0.025, 0.048] |
+| 12 meses | 0.771 [0.690, 0.853] | 0.739 | +0.032 [−0.020, 0.085] | +0.003 [−0.025, 0.032] |
 
 - En todas las etapas, p de permutación = 0.002 (el mínimo posible con 500 permutaciones) y p Holm = 0.024, con el límite inferior del IC por encima de 0.5. Ese p Holm idéntico es el piso que imponen 500 permutaciones × 12 pruebas, no un empate de evidencia.
-- **Ya al nacer** el modelo clínico alcanza AUC ≈ 0.70. El salto más grande ocurre entre 40 semanas y 3 meses (+0.044, IC que roza el 0); después la curva se aplana alrededor de 0.75.
-- **Ningún Δ frente a solo cabeza es significativo.** Al nacer y a las 40 semanas el aporte clínico es mayor (+0.08 a +0.09), pero con IC que cruzan 0. Desde los 3 meses, el perímetro cefálico solo explica prácticamente todo el desempeño, en línea con lo que anticipaba DEC-036.
-- SHAP (modelo final a 12 meses, `shap_hardware_ok_12_meses.csv`): los principales aportes son el sexo, los perímetros cefálicos (3, 6, 9 y 12 meses), la primiparidad, la adaptación neonatal, el sufrimiento fetal agudo, la talla a 9 meses y la lactancia materna a 12 meses. El brazo canguro y la duración en posición canguro tienen un peso menor.
+- **Ya al nacer** el modelo clínico alcanza AUC ≈ 0.70. El salto más grande ocurre entre 40 semanas y 3 meses (+0.060, p = 0.014 sin ajustar), cuando entra el perímetro de los 3 meses; después la curva sube lentamente hasta ≈ 0.77.
+- **Δ frente a solo cabeza.** Solo el del nacimiento tiene un IC que excluye 0 (+0.092, p = 0.020). Los incrementos se reportan sin ajuste por multiplicidad (DEC-033), así que es un resultado nominal. Además, DEC-039 y la sensibilidad `etiqueta_sexo` muestran que ese +0.09 es el sexo y no las variables clínicas: con normas por sexo, el Δ al nacer cae a +0.005. Desde los 3 meses el perímetro cefálico solo explica casi todo el desempeño (Δ de +0.02 a +0.03, IC que cruzan 0), en línea con DEC-036.
+- Frente a la primera corrida, la imputación por modelo (DEC-041) estrechó los IC de los Δ (al nacer, de [−0.016, 0.199] a [0.016, 0.168]) sin mover las medias, y la etiqueta corregida subió el AUC clínico en ≈ 0.01–0.02 desde los 3 meses.
+- SHAP (modelo final a 12 meses, `shap_hardware_ok_12_meses.csv`): los principales aportes son el sexo, los perímetros cefálicos (3 y 6 meses), la primiparidad, la adaptación neonatal, la lactancia materna a 12 meses, la duración en posición canguro, el sufrimiento fetal agudo, la fototerapia y el estado crítico neonatal.
 
 **Sensibilidades de `hardware_ok`.** La conclusión se mantiene en todas:
-- *Familias:* RF da AUC 0.70–0.75 y HGB 0.68–0.73, el mismo patrón que el elastic net.
-- *Imputación por mediana:* 0.69–0.75.
-- *IPW (DEC-032):* 0.68–0.76, diferencias de menos de 0.01 frente al análisis sin ponderar.
-- *`hardware_ok_qc` (n = 168, 79 positivos):* 0.72–0.78, algo más alto. El modelo de solo cabeza queda en 0.59–0.76 y la brecha temprana se mantiene.
+- *Familias:* RF da AUC 0.70–0.77 y HGB 0.71–0.77, el mismo patrón que el elastic net.
+- *Imputación por mediana:* 0.69–0.76.
+- *IPW (DEC-032):* 0.69–0.77, diferencias de menos de 0.01 frente al análisis sin ponderar.
+- *`hardware_ok_qc` (n = 168, 84 positivos):* 0.71–0.77. Aquí el modelo de solo cabeza alcanza al clínico desde los 6 meses (0.77 en ambos) y ningún Δ es significativo.
+- *`etiqueta_ref_completa` (93/209, la etiqueta anterior):* 0.69–0.76. Reproduce la primera corrida, así que el cambio de referencia no altera las conclusiones.
+- *`etiqueta_sexo` (`hardware_ok_sex`, 79/209):* el AUC baja a 0.58–0.69 y el clínico ya no supera a solo cabeza en ninguna etapa (Δ de −0.043 a +0.005). Gran parte de la señal temprana de la etiqueta principal era la diferencia de tamaño por sexo (ver DEC-041).
 
 **Conclusión para la tesis.**
-1. La estructura motora a los 20 años (`hardware_ok`) es moderadamente predecible desde el nacimiento (AUC ≈ 0.70) y hasta los 12 meses (≈ 0.75). Buena parte de esa señal, sobre todo desde los 3 meses, es el crecimiento cefálico.
+1. La estructura motora a los 20 años (`hardware_ok`) es moderadamente predecible desde el nacimiento (AUC ≈ 0.70) y hasta los 12 meses (≈ 0.77). La señal viene sobre todo del crecimiento cefálico y del sexo.
 2. La función motora fina (NHPT) no es predecible con la información clínica temprana.
-3. Las variables clínicas no muestran un aporte incremental demostrable sobre el perímetro cefálico con n = 209. Las ganancias tempranas (+0.08) son compatibles con un efecto real pequeño, pero no se pueden afirmar con esta muestra.
+3. Las variables clínicas no muestran un aporte incremental demostrable sobre el perímetro cefálico y el sexo con n = 209 (DEC-039).
+4. Con normas por sexo, la estructura es menos predecible (AUC ≈ 0.68 desde los 3 meses) y el aporte del sexo desaparece. Cuál etiqueta usar como principal es una decisión de definición del desenlace, no de modelado (ver DEC-041).
 
 **Consecuencias.**
 - El modelo para predicción individual (`predict_individual`) usa la etapa elegida por el usuario. Los modelos ajustados se guardan en `modelos/` (fuera del repo).
@@ -1026,32 +1031,29 @@ Si ningún criterio se cumple, la variante queda **probada y descartada**, se re
 
 **Implementación.** `src/models/explore_incremental.py` reutiliza las funciones de `train_incremental` sin cambiar el análisis principal.
 
-**Resultados (2026-11-21).** Corrida: `uv run python -m src.models.explore_incremental`. El modelo `clinico` del E2 reproduce exactamente a DEC-038 (|ΔAUC| máx = 0.0000), así que todas las comparaciones son pareadas sobre los mismos folds.
+**Resultados (2026-11-21, repetidos tras DEC-041).** Corrida: `uv run python -m src.models.explore_incremental`. El modelo `clinico` del E2 reproduce a DEC-038 salvo el redondeo del CSV (|ΔAUC| máx = 4 × 10⁻⁵), así que todas las comparaciones son pareadas sobre los mismos folds. Cada modelo se imputa solo con sus columnas (DEC-041).
 
 | Etapa | E2 solo cabeza | E2 cabeza + sexo | E2 parsimonioso | E2 clínico (= DEC-038) | E1 cabeza + sexo | E1 parsimonioso | E1 clínico |
 |---|---|---|---|---|---|---|---|
-| Nacimiento | 0.607 | 0.712 | 0.703 | 0.698 | 0.714 | 0.705 | 0.729 |
-| 40 semanas | 0.613 | 0.708 | 0.706 | 0.690 | 0.713 | 0.716 | 0.721 |
-| 3 meses | 0.712 | 0.745 | 0.754 | 0.734 | 0.755 | 0.768 | 0.759 |
-| 6 meses | 0.745 | 0.767 | 0.785 | 0.752 | 0.776 | 0.795 | 0.769 |
-| 9 meses | 0.741 | 0.763 | 0.782 | 0.751 | 0.774 | 0.791 | 0.779 |
-| 12 meses | 0.730 | 0.758 | 0.782 | 0.755 | 0.769 | 0.791 | 0.779 |
+| Nacimiento | 0.611 | 0.716 | 0.689 | 0.703 | 0.718 | 0.694 | 0.727 |
+| 40 semanas | 0.617 | 0.707 | 0.697 | 0.685 | 0.713 | 0.708 | 0.712 |
+| 3 meses | 0.712 | 0.755 | 0.762 | 0.746 | 0.767 | 0.774 | 0.756 |
+| 6 meses | 0.736 | 0.756 | 0.787 | 0.756 | 0.778 | 0.798 | 0.766 |
+| 9 meses | 0.746 | 0.763 | 0.788 | 0.768 | 0.777 | 0.794 | 0.770 |
+| 12 meses | 0.739 | 0.764 | 0.798 | 0.771 | 0.771 | 0.799 | 0.772 |
 
-(ROC-AUC fuera de muestra, media de 25 folds. En E1, el R² del `hw_norm_score` va de 0.19 a 0.35.)
+(ROC-AUC fuera de muestra, media de 25 folds. En E1, el R² del `hw_norm_score` va de 0.08 (solo cabeza al nacer) a 0.34.)
 
-- **E0, la referencia cabeza + sexo, explica la "ganancia clínica temprana" de DEC-038.** Agregar solo el sexo al perímetro sube el AUC al nacer de 0.607 a 0.712. Ese +0.09 que DEC-038 atribuía a las variables clínicas al nacer y a las 40 semanas es, en la práctica, el sexo. Esto es coherente con que `hardware_ok` use volúmenes absolutos, que son mayores en hombres.
-- **Criterio 1 (aporte clínico sobre cabeza + sexo): no se cumple.** Las 24 pruebas tienen p Holm = 1.0. Los Δ van de −0.033 a +0.024, todos con IC que cruzan 0. El modelo parsimonioso tiene Δ positivos desde los 3 meses en ambos experimentos (+0.009 a +0.024 de AUC en E2), pero ninguno es significativo.
-- **Criterio 2 (AUC frente a DEC-038): se cumple formalmente en 1 de 34 comparaciones,** el E1 clínico al nacer: +0.031 [0.002, 0.060]. Hay que leerlo con cautela:
-  - el límite inferior apenas supera 0;
-  - el criterio no corrige por las 34 comparaciones, y una sola con IC tan justo es compatible con el azar.
-  - Lo que sí es consistente es la dirección. El desenlace continuo (E1) mejora el AUC del modelo clínico en las 6 etapas (+0.017 a +0.031). El parsimonioso de E1 logra las medias más altas del análisis (0.79–0.80 entre los 6 y los 12 meses, +0.033 a +0.042 frente a DEC-038), con IC que cruzan 0.
+- **E0, la referencia cabeza + sexo, explica la "ganancia clínica temprana" de DEC-038.** Agregar solo el sexo al perímetro sube el AUC al nacer de 0.611 a 0.716, más que el modelo clínico completo (0.703). El +0.09 de DEC-038 al nacer es, en la práctica, el sexo. E3 (DEC-041) muestra que ese aporte viene de la etiqueta: con normas por sexo desaparece.
+- **Criterio 1 (aporte clínico sobre cabeza + sexo): no se cumple.** Las 24 pruebas tienen p Holm ≥ 0.95, con Δ de −0.032 a +0.034. El parsimonioso del E2 tiene Δ positivos desde los 3 meses (+0.007 a +0.034). A los 9 y 12 meses su IC sin ajustar excluye 0 (+0.025 [0.001, 0.049] y +0.034 [0.002, 0.067], p ≈ 0.04), pero no sobrevive a Holm.
+- **Criterio 2 (AUC frente a DEC-038): no se cumple** en ninguna de las 42 comparaciones. Las mayores medias son las del parsimonioso (E1 a los 6 meses: +0.041 [−0.019, 0.102]; E2 a los 6 meses: +0.030), todas con IC que cruzan 0. En la primera corrida se había cumplido una (E1 clínico al nacer, +0.031 [0.002, 0.060]). Con la etiqueta corregida baja a +0.024 y su IC cruza 0, lo que confirma que era compatible con el azar.
 
 **Conclusión.**
 1. DEC-038 se mantiene como resultado principal.
-2. La interpretación cambia en un punto: no hay evidencia de aporte clínico más allá del perímetro cefálico y el sexo en ninguna etapa. El aparente aporte temprano era el sexo.
+2. No hay evidencia de aporte clínico más allá del perímetro cefálico y el sexo en ninguna etapa. El aparente aporte temprano era el sexo, que a su vez refleja las normas no estratificadas de la etiqueta (E3, DEC-041).
 3. Dos señales quedan como **hipótesis para validar**, no como hallazgos:
-   - entrenar con el puntaje continuo produce modelos algo mejores;
-   - un modelo parsimonioso (cabeza + sexo + unas 10 variables clínicas) iguala o supera al clínico completo con una quinta parte de las variables.
+   - entrenar con el puntaje continuo produce modelos algo mejores (el AUC derivado del E1 supera al del E2 en las 24 combinaciones de modelo y etapa, aunque por poco y sin prueba formal);
+   - un modelo parsimonioso (cabeza + sexo + unas 10 variables clínicas) iguala o supera al clínico completo desde los 3 meses (AUC 0.76–0.80) con una quinta parte de las variables.
 4. Para la herramienta de predicción individual (fuera del alcance de este ticket), cabeza + sexo o el parsimonioso son candidatos más simples e igual de buenos que el clínico completo. La elección debe hacerse con datos nuevos o validación externa, no con estos mismos folds.
 
 Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `incrementos.csv`, `curva_exploratoria.png` y `meta.json`).
@@ -1075,3 +1077,33 @@ Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `increm
 - `z_nhpt_ref` se estandariza contra 38 referencias en lugar de 49.
 - La normativa se estima con 28 referencias con resonancia, y menos aún por sexo en la variante estratificada, así que es menos estable; la referencia completa permite comprobar que las conclusiones no dependen de ello.
 - El 5.2 (PR #45) debe volver a correrse con la etiqueta corregida, y la pestaña poblacional (5.3) debe leer los reportes regenerados.
+
+---
+
+## DEC-041 — Ajustes del 5.2 tras la revisión del PR y la nueva referencia (DEC-040)
+
+- **Fecha:** 2026-11-21 · **Autor:** Martín Quintero · **Estado:** Aceptada
+- **Contexto / issue:** revisión del PR #45 (ticket 5.2, issue #33), después de fusionar el 5.1.5 (DEC-040). Se registra **antes** de repetir las corridas.
+
+**Decisión.** Antes de repetir DEC-038 y DEC-039 se hacen cuatro cambios:
+
+1. **Etiqueta corregida.** Las corridas usan el `hardware_ok` anclado a la referencia sin RCIU-Fenton (98/209 positivos y 84/168 en `qc_ok`, DEC-040). La etiqueta anterior (93/209) queda como sensibilidad `etiqueta_ref_completa` (`hardware_ok_ref_completa`), para ver cuánto cambian las cifras.
+2. **Una sola fuente para `z_nhpt_ref`.** `train_incremental.nhpt_z_scores` toma la referencia con `build_hardware_ok.reference_mask` y `with_rciu_flag`, una función nueva que concentra la única interpretación del indicador RCIU y que también usa `load_inputs`. Así ya no recalcula la referencia por su cuenta. Una prueba con datos reales verifica que el z coincide con el de `hardware_ok.parquet`.
+3. **Cada modelo se imputa solo con sus columnas.** Antes, los folds se imputaban con todas las variables clínicas de la etapa y los modelos de referencia tomaban luego sus columnas. Así, los perímetros faltantes (~20 % al nacer) se imputaban con información clínica: la referencia no era "solo cabeza" y el Δ clínico quedaba subestimado. Ahora la imputación (MICE por fold, DEC-035) usa únicamente las columnas de cada modelo. Aplica a `solo_cabeza` en el análisis principal y a `solo_cabeza`, `cabeza_sexo` y `parsimonioso` en el exploratorio. El modelo `clinico` no cambia, porque sus columnas son las de la etapa.
+4. **Sensibilidad con normas por sexo.** `hardware_ok` usa volúmenes absolutos con normas no estratificadas por sexo, y los hombres tienen volúmenes mayores, así que parte del aporte del sexo puede venir de la etiqueta. Con la referencia sin RCIU, `hardware_ok_sex` tiene 79/209 positivos, 9 puntos menos que la principal (DEC-040). Se agrega en dos lugares:
+   - el escenario `etiqueta_sexo` en las sensibilidades del análisis principal;
+   - el experimento **E3** en el exploratorio, con los mismos cuatro modelos sobre `hardware_ok_sex`. E3 es **descriptivo**: sus Δ (`cabeza_sexo` vs `solo_cabeza`, y `parsimonioso` y `clinico` vs `cabeza_sexo`) no entran al Holm ni a los criterios de DEC-039.
+
+   Interpretación fijada de antemano:
+   - Si en E3 el Δ de `cabeza_sexo` frente a `solo_cabeza` cae a cerca de 0 (IC que contiene 0), el aporte del sexo en E2 se atribuye principalmente a la etiqueta.
+   - Si se mantiene, el sexo aporta información más allá de las normas.
+
+**Sin cambios:** el diseño (DEC-033), el mapeo de etapas (DEC-034), los modelos, las rejillas, los folds, la inferencia y los criterios prerregistrados de DEC-039. Las cifras de DEC-038 y DEC-039 se reemplazan por las de la corrida nueva; las anteriores quedan en el historial de git.
+
+**Consecuencias.** Hay que repetir el análisis principal completo (~3 h) y el exploratorio. El análisis por ICV (5.6) se registrará en una DEC posterior, porque DEC-040 ya la usó el 5.1.5.
+
+**Resultado (2026-11-21).** Las corridas se repitieron con estos cambios; las cifras están en DEC-038 y DEC-039.
+- *Etiqueta corregida:* el AUC clínico pasa de 0.69–0.76 a 0.69–0.77. La sensibilidad `etiqueta_ref_completa` reproduce la corrida anterior, así que las conclusiones no dependen de la referencia.
+- *Imputación por modelo:* las medias de los modelos de referencia casi no cambian, pero los IC de los Δ se estrechan (al nacer, el Δ vs solo cabeza pasa de [−0.016, 0.199] a [0.016, 0.168]).
+- *E3 (normas por sexo):* el Δ de `cabeza_sexo` frente a `solo_cabeza` está entre −0.015 y +0.007, con todos los IC conteniendo 0 (al nacer: −0.015 [−0.084, 0.053]). Según la regla fijada arriba, **el aporte del sexo en E2 se atribuye principalmente a la etiqueta**: los hombres tienen volúmenes absolutos mayores y la norma no estratificada los clasifica más a menudo como `hardware_ok`. En E3 el AUC baja a 0.57–0.71 en todos los modelos, y ni el clínico ni el parsimonioso superan a solo cabeza.
+- *Implicación:* el AUC ≈ 0.70 al nacer con la etiqueta principal se apoya en buena parte en el sexo. Elegir entre `hardware_ok` y `hardware_ok_sex` como desenlace principal es una pregunta de definición para el equipo y el director (¿la "estructura adecuada" debe juzgarse frente a normas del propio sexo?). Conviene resolverla junto con el análisis por ICV (5.6), que ataca el mismo problema de escala.

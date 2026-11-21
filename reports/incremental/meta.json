@@ -1,6 +1,6 @@
 {
   "ticket": "5.2",
-  "decision": "DEC-033",
+  "decision": "DEC-033..DEC-037",
   "cv": {
     "n_splits": 5,
     "n_repeats": 5,
@@ -100,6 +100,22 @@
       "primary": false
     },
     {
+      "name": "etiqueta_sexo",
+      "target": "hardware_ok_sex",
+      "family": "enet",
+      "imputation": "mice",
+      "weighted": false,
+      "primary": false
+    },
+    {
+      "name": "etiqueta_ref_completa",
+      "target": "hardware_ok_ref_completa",
+      "family": "enet",
+      "imputation": "mice",
+      "weighted": false,
+      "primary": false
+    },
+    {
       "name": "submuestra_rm",
       "target": "nhpt_mri",
       "family": "huber",
@@ -127,14 +143,28 @@
     "hardware_ok": {
       "population": "fit_sample (DEC-007)",
       "n": 209,
-      "positives": 93,
+      "positives": 98,
       "n_candidate_features": 89,
       "dropped_missing": {}
     },
     "hardware_ok_qc": {
       "population": "fit_sample con qc_ok",
       "n": 168,
+      "positives": 84,
+      "n_candidate_features": 89,
+      "dropped_missing": {}
+    },
+    "hardware_ok_sex": {
+      "population": "fit_sample, normas por sexo",
+      "n": 209,
       "positives": 79,
+      "n_candidate_features": 89,
+      "dropped_missing": {}
+    },
+    "hardware_ok_ref_completa": {
+      "population": "fit_sample, referencia con RCIU-Fenton",
+      "n": 209,
+      "positives": 93,
       "n_candidate_features": 89,
       "dropped_missing": {}
     },
@@ -638,5 +668,5 @@
     "pandas": "3.0.6",
     "numpy": "2.5.3"
   },
-  "created_at": "2026-11-20T18:18:12+00:00"
+  "created_at": "2026-11-21T22:28:43+00:00"
 }
