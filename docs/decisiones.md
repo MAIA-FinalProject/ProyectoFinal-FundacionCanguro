@@ -964,3 +964,86 @@ Sin este modelo de referencia, una etapa "significativa" podría leerse como "la
 - El modelo para predicción individual (`predict_individual`) usa la etapa elegida por el usuario. Los modelos ajustados se guardan en `modelos/` (fuera del repo).
 - Antes de cualquier uso clínico se requieren la validación del mapeo de etapas por la Fundación (DEC-034) y una validación externa.
 - Si la Fundación cambia el mapeo, la corrida debe repetirse y el cambio registrarse antes de ver los nuevos resultados.
+
+---
+
+## DEC-039 — Análisis exploratorio post hoc: desenlace continuo, referencia "cabeza + sexo" y modelo parsimonioso
+
+- **Fecha:** 2026-11-21 · **Autor:** Martín Quintero · **Estado:** Aceptada (prerregistro; resultados abajo)
+- **Contexto / issue:** ticket 5.2 (issue #33), después de DEC-038
+
+**Contexto.** DEC-038 encontró que `hardware_ok` es predecible (AUC 0.70–0.75), pero que el aporte de las variables clínicas sobre el perímetro cefálico no es significativo. Esta DEC fija, **antes de correr nada**, tres variantes que podrían aumentar el poder para detectar ese aporte o mejorar el AUC. Como se plantean después de ver los resultados, son **exploratorias**: no reemplazan a DEC-038, que se mantiene como análisis principal.
+
+**Variante descartada antes de correr.** Usar z-scores del perímetro cefálico por edad y sexo (`NUT12M_pcam*`) y su velocidad de crecimiento. Un chequeo univariado agregado mostró que el z-score predice peor que el perímetro crudo (AUC 0.65 contra 0.72 a los 12 meses). `hardware_ok` usa volúmenes absolutos, y el z-score elimina la diferencia de tamaño por sexo. La velocidad es una resta de perímetros que un modelo lineal ya tiene.
+
+**Diseño.** Se aplica en las 6 etapas, con n = 209, la misma validación cruzada 5×5 (estratificada por `hardware_ok`, semilla 42 e idénticos folds a DEC-038) y la misma imputación MICE por fold y etapa (DEC-035). Se comparan cuatro modelos:
+
+| Modelo | Variables (acumuladas hasta la etapa) |
+|---|---|
+| `solo_cabeza` | perímetros cefálicos (referencia de DEC-036) |
+| `cabeza_sexo` | perímetros + `BIRTH_sexo5` (**nueva referencia**) |
+| `parsimonioso` | `cabeza_sexo` + la lista clínica fija de abajo |
+| `clinico` | las variables completas de DEC-034 |
+
+Lista clínica del modelo parsimonioso, elegida por criterio clínico y acordada con el equipo el 2026-11-21. Se fija aquí y no se ajusta según los resultados:
+- **Nacimiento:**
+  - edad gestacional (`BIRTH_ballar5`);
+  - peso al nacer (`BIRTH_peso5`);
+  - RCIU (`BIRTH_retardocrecimientointraute`);
+  - fragilidad (`FOLLOW_Fragility_Rasch_441_2PL`);
+  - educación materna (`SCB_nivm1`).
+- **40 semanas:**
+  - estado crítico neonatal (`NEO_critico`);
+  - brazo canguro (`arm_kmc`);
+  - duración en posición canguro (`EX41_durPCconcontroles03`).
+- **3, 6 y 9 meses:** sin variables nuevas (solo el perímetro de la etapa).
+- **12 meses:**
+  - lactancia materna a los 12 meses (`NUT12M_LM12m`);
+  - HOME total (`HOMET_ttotalsubscalehome12mraw_std`, DEC-021).
+
+**Experimentos.**
+- **E0 y E2, desenlace binario `hardware_ok`:**
+  - `solo_cabeza`, `cabeza_sexo` y `clinico` con el elastic net logístico de DEC-033;
+  - `parsimonioso` con regresión logística L2 (`LogisticRegressionCV`, sin L1), con `C` elegida en la CV interna.
+  - Métrica: ROC-AUC.
+- **E1, desenlace continuo `hw_norm_score`:**
+  - los cuatro modelos con Huber (y `parsimonioso` con la misma familia);
+  - métricas: R² fuera de muestra y el ROC-AUC del puntaje predicho frente a `hardware_ok` en el fold de prueba, que es comparable con DEC-038.
+
+**Criterios de éxito, fijados de antemano.**
+1. *Aporte clínico.* Se compara Δ de `clinico` y `parsimonioso` frente a `cabeza_sexo`, en E1 (por R²) y en E2 (por AUC): 24 pruebas pareadas con t de Nadeau–Bengio bilateral y Holm propio de esta familia exploratoria. Hay éxito si alguna tiene p Holm < 0.05 con Δ > 0.
+2. *AUC general.* Hay éxito si en alguna etapa el AUC (directo en E2 o derivado en E1) de algún modelo supera al `clinico` de DEC-038 en al menos 0.02 de media, con un Δ pareado cuyo IC tenga límite inferior mayor que 0.
+
+Si ningún criterio se cumple, la variante queda **probada y descartada**, se registra aquí y DEC-038 sigue siendo el resultado del ticket. No se corren permutaciones porque no se reclama superioridad frente al azar, que ya quedó establecida en DEC-038. Los reportes van a `reports/incremental/exploratorio/`.
+
+**Implementación.** `src/models/explore_incremental.py` reutiliza las funciones de `train_incremental` sin cambiar el análisis principal.
+
+**Resultados (2026-11-21).** Corrida: `uv run python -m src.models.explore_incremental`. El modelo `clinico` del E2 reproduce exactamente a DEC-038 (|ΔAUC| máx = 0.0000), así que todas las comparaciones son pareadas sobre los mismos folds.
+
+| Etapa | E2 solo cabeza | E2 cabeza + sexo | E2 parsimonioso | E2 clínico (= DEC-038) | E1 cabeza + sexo | E1 parsimonioso | E1 clínico |
+|---|---|---|---|---|---|---|---|
+| Nacimiento | 0.607 | 0.712 | 0.703 | 0.698 | 0.714 | 0.705 | 0.729 |
+| 40 semanas | 0.613 | 0.708 | 0.706 | 0.690 | 0.713 | 0.716 | 0.721 |
+| 3 meses | 0.712 | 0.745 | 0.754 | 0.734 | 0.755 | 0.768 | 0.759 |
+| 6 meses | 0.745 | 0.767 | 0.785 | 0.752 | 0.776 | 0.795 | 0.769 |
+| 9 meses | 0.741 | 0.763 | 0.782 | 0.751 | 0.774 | 0.791 | 0.779 |
+| 12 meses | 0.730 | 0.758 | 0.782 | 0.755 | 0.769 | 0.791 | 0.779 |
+
+(ROC-AUC fuera de muestra, media de 25 folds. En E1, el R² del `hw_norm_score` va de 0.19 a 0.35.)
+
+- **E0, la referencia cabeza + sexo, explica la "ganancia clínica temprana" de DEC-038.** Agregar solo el sexo al perímetro sube el AUC al nacer de 0.607 a 0.712. Ese +0.09 que DEC-038 atribuía a las variables clínicas al nacer y a las 40 semanas es, en la práctica, el sexo. Esto es coherente con que `hardware_ok` use volúmenes absolutos, que son mayores en hombres.
+- **Criterio 1 (aporte clínico sobre cabeza + sexo): no se cumple.** Las 24 pruebas tienen p Holm = 1.0. Los Δ van de −0.033 a +0.024, todos con IC que cruzan 0. El modelo parsimonioso tiene Δ positivos desde los 3 meses en ambos experimentos (+0.009 a +0.024 de AUC en E2), pero ninguno es significativo.
+- **Criterio 2 (AUC frente a DEC-038): se cumple formalmente en 1 de 34 comparaciones,** el E1 clínico al nacer: +0.031 [0.002, 0.060]. Hay que leerlo con cautela:
+  - el límite inferior apenas supera 0;
+  - el criterio no corrige por las 34 comparaciones, y una sola con IC tan justo es compatible con el azar.
+  - Lo que sí es consistente es la dirección. El desenlace continuo (E1) mejora el AUC del modelo clínico en las 6 etapas (+0.017 a +0.031). El parsimonioso de E1 logra las medias más altas del análisis (0.79–0.80 entre los 6 y los 12 meses, +0.033 a +0.042 frente a DEC-038), con IC que cruzan 0.
+
+**Conclusión.**
+1. DEC-038 se mantiene como resultado principal.
+2. La interpretación cambia en un punto: no hay evidencia de aporte clínico más allá del perímetro cefálico y el sexo en ninguna etapa. El aparente aporte temprano era el sexo.
+3. Dos señales quedan como **hipótesis para validar**, no como hallazgos:
+   - entrenar con el puntaje continuo produce modelos algo mejores;
+   - un modelo parsimonioso (cabeza + sexo + unas 10 variables clínicas) iguala o supera al clínico completo con una quinta parte de las variables.
+4. Para la herramienta de predicción individual (fuera del alcance de este ticket), cabeza + sexo o el parsimonioso son candidatos más simples e igual de buenos que el clínico completo. La elección debe hacerse con datos nuevos o validación externa, no con estos mismos folds.
+
+Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `incrementos.csv`, `curva_exploratoria.png` y `meta.json`).

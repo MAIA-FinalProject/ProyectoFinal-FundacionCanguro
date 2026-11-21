@@ -217,7 +217,7 @@ Exporta `data/features/ipw_mri.parquet` (columna `ipw`, unir por `code`) y `data
 
 ### Capacidad predictiva incremental por etapa (`src/models/train_incremental.py`)
 
-Evalúa si las variables clínicas acumuladas por etapa (nacimiento, 40 semanas, 3, 6, 9 y 12 meses de edad corregida) predicen dos desenlaces a los 20 años: el NHPT estandarizado contra la referencia (`z_nhpt_ref`, n = 262) y `hardware_ok` (n = 209). Las decisiones están en DEC-033 a DEC-037 (el mapeo de etapas, DEC-034, es una propuesta para validar con la Fundación).
+Evalúa si las variables clínicas acumuladas por etapa (nacimiento, 40 semanas, 3, 6, 9 y 12 meses de edad corregida) predicen dos desenlaces a los 20 años: el NHPT estandarizado contra la referencia (`z_nhpt_ref`, n = 262) y `hardware_ok` (n = 209). Las decisiones están en DEC-033 a DEC-037, los resultados en DEC-038 y el análisis exploratorio en DEC-039 (el mapeo de etapas, DEC-034, es una propuesta para validar con la Fundación).
 
 ```bash
 uv run python -m src.models.train_incremental                  # principal, rápido (~10 min)
@@ -238,6 +238,29 @@ uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db  # comparar corr
 - **"Supera al azar"** = p ajustado por Holm < 0.05 (12 pruebas principales) y límite inferior del IC 95% (Nadeau-Bengio) sobre el azar.
 - **Predicción individual:** `predict_individual(record, "hardware_ok", "12_meses")` devuelve la predicción y las contribuciones SHAP de un individuo. Las faltantes se imputan.
 - **MLflow es local** (`mlruns/`, fuera de git) y solo registra parámetros y métricas agregadas.
+
+**Resultados (DEC-038).**
+- **NHPT:** no hay capacidad predictiva en ninguna etapa (R² ≤ 0).
+- **`hardware_ok`:** supera al azar desde el nacimiento (AUC 0.70) hasta los 12 meses (0.75), pero el aporte sobre el perímetro cefálico no es significativo.
+
+#### Exploratorio post hoc (`src/models/explore_incremental.py`, DEC-039)
+
+Tres variantes, fijadas antes de correrlas y evaluadas con los mismos folds que DEC-038:
+- una referencia "perímetro + sexo";
+- el desenlace continuo `hw_norm_score`;
+- un modelo parsimonioso: perímetro + sexo + 10 variables clínicas elegidas por criterio clínico.
+
+```bash
+uv run python -m src.models.explore_incremental   # ~35 min; salida en reports/incremental/exploratorio/
+```
+
+**Para quien continúe (p. ej., el ticket de la herramienta de predicción):**
+- **El predictor real es perímetro cefálico + sexo.** Con solo esas dos variables se logra AUC 0.71 al nacer y 0.76 a los 12 meses. La aparente ganancia clínica temprana de DEC-038 era el sexo. Ninguna variable clínica adicional mostró aporte significativo (24 pruebas, p Holm = 1.0).
+- **Dos señales consistentes, pero no significativas, que conviene validar con datos nuevos:**
+  - entrenar con `hw_norm_score` continuo mejora el AUC de 0.02 a 0.03 en todas las etapas;
+  - el modelo parsimonioso (`PARSIMONIOUS_VARIABLES`) llega a AUC ≈ 0.79 entre los 6 y los 12 meses con 13 a 17 variables.
+- **No hay que elegir el modelo final comparando más variantes con estos mismos 209 sujetos**, porque se sobreajusta la validación. Cualquier variante nueva debe registrarse en `docs/decisiones.md` antes de correrla, como DEC-039.
+- **`hardware_ok` usa volúmenes absolutos**, así que en parte mide "cerebro grande" (DEC-036). Eso explica el peso del perímetro y del sexo, y debe explicarse junto a cualquier predicción.
 
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 
