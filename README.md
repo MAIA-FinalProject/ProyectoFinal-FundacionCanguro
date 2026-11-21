@@ -215,6 +215,30 @@ Estima la probabilidad de tener resonancia a los 20 años entre los 264 prematur
 
 Exporta `data/features/ipw_mri.parquet` (columna `ipw`, unir por `code`) y `data/features/ipw_mri_report.json` (pesos, tamaño de muestra efectivo, SMD antes y después de ponderar, balance en las submuestras de 209 y 168).
 
+### Capacidad predictiva incremental por etapa (`src/models/train_incremental.py`)
+
+Evalúa si las variables clínicas acumuladas por etapa (nacimiento, 40 semanas, 3, 6, 9 y 12 meses de edad corregida) predicen dos desenlaces a los 20 años: el NHPT estandarizado contra la referencia (`z_nhpt_ref`, n = 262) y `hardware_ok` (n = 209). Las decisiones están en DEC-033 a DEC-037 (el mapeo de etapas, DEC-034, es una propuesta para validar con la Fundación).
+
+```bash
+uv run python -m src.models.train_incremental                  # principal, rápido (~10 min)
+uv run python -m src.models.train_incremental --sensitivity --permutations 500 --mlflow  # informe (~3 h)
+uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db  # comparar corridas en el navegador
+```
+
+| | |
+|---|---|
+| **Entrada** | `data/interim/{canguro,tradicional,referencia}.parquet`, `data/features/hardware_ok.parquet`, `data/features/ipw_mri.parquet` |
+| **Variables por etapa** | Lista explícita en `src/models/stages.py` (etapas acumulativas, exclusiones con su motivo) |
+| **Salida** | `reports/incremental/`: `tabla_por_etapa.csv`, `incrementos.csv`, `curva_<desenlace>.png`, `meta.json` y, si alguna etapa supera al azar, `shap_<desenlace>_<etapa>.csv/.png` |
+| **Modelos** | `modelos/incremental_<desenlace>_<etapa>.pkl` (solo etapas que superan al azar) |
+
+- **Validación cruzada anidada** (5 × 5 externa, 3 interna) con los mismos folds en todas las etapas. El imputador (`StageImputer`, en `imputation.py`) se ajusta dentro de cada fold y solo con las variables de la etapa.
+- **Modelo principal fijado de antemano** (elastic net para `hardware_ok`, Huber para el NHPT); el resto de familias, la imputación por mediana, los pesos IPW y las submuestras (`--sensitivity`) son sensibilidad.
+- **Modelo de referencia "solo perímetro cefálico"** en cada etapa: el aporte clínico se mide por encima del tamaño de la cabeza.
+- **"Supera al azar"** = p ajustado por Holm < 0.05 (12 pruebas principales) y límite inferior del IC 95% (Nadeau-Bengio) sobre el azar.
+- **Predicción individual:** `predict_individual(record, "hardware_ok", "12_meses")` devuelve la predicción y las contribuciones SHAP de un individuo. Las faltantes se imputan.
+- **MLflow es local** (`mlruns/`, fuera de git) y solo registra parámetros y métricas agregadas.
+
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 
 Un solo comando ejecuta en orden la ingesta (`load_data.py`) y los módulos de features (`build_hw.py`, `build_target.py`). Los pasos cuyo script todavía no existe se reportan como `PENDIENTE` y se omiten sin romper el flujo; con `--strict` fallan. El pipeline crea `data/interim`, `data/processed` y `data/features` si no existen, y se detiene en el primer paso que falle.

@@ -104,3 +104,10 @@ reports/*
 !reports/hardware_ok/
 !reports/hardware_ok/**
 
+# Reportes agregados del ticket 5.2 (sin filas de pacientes, DEC-033).
+!reports/incremental/
+!reports/incremental/**
+
+# Registro local de experimentos MLflow (ticket 5.2): no se versiona.
+mlruns/
+mlartifacts/
