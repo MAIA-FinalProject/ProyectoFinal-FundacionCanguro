@@ -241,6 +241,23 @@ def cliffs_delta_with_ci(
     return delta, ci_low, ci_high
 
 
+def with_rciu_flag(df: pd.DataFrame) -> pd.DataFrame:
+    """Copia con ``rciu_fenton_ref`` booleano (1, "1" o "true"; sin columna = False).
+
+    Única interpretación del indicador; la usan ``load_inputs`` y el 5.2
+    (``train_incremental.nhpt_z_scores``) para que la referencia no se desfase.
+    """
+    out = df.copy()
+    if "rciu_fenton_ref" not in out.columns:
+        out["rciu_fenton_ref"] = False
+        return out
+    raw = out["rciu_fenton_ref"].astype(str)
+    out["rciu_fenton_ref"] = pd.to_numeric(raw, errors="coerce").fillna(0).eq(
+        1
+    ) | raw.str.lower().eq("true")
+    return out
+
+
 def reference_mask(df: pd.DataFrame, include_rciu: bool = False) -> pd.Series:
     """Referencia a término (``ubicac == 3``); por defecto sin RCIU-Fenton (DEC-040)."""
     mask = df["ubicac"].eq(3)
@@ -317,20 +334,7 @@ def load_inputs(
     frames = []
     for path in cohort_paths:
         part = pd.read_parquet(path)
-        if "rciu_fenton_ref" not in part.columns:
-            part = pd.concat(
-                [part, pd.Series(False, index=part.index, name="rciu_fenton_ref")],
-                axis=1,
-            )
-        else:
-            rciu_bool = pd.to_numeric(
-                part["rciu_fenton_ref"].astype(str), errors="coerce"
-            ).fillna(0).eq(1) | part["rciu_fenton_ref"].astype(str).str.lower().eq(
-                "true"
-            )
-            part = part.copy()
-            part["rciu_fenton_ref"] = rciu_bool
-        frames.append(part)
+        frames.append(with_rciu_flag(part))
 
     interim_df = pd.concat(frames, ignore_index=True)
     return hw_df, interim_df
