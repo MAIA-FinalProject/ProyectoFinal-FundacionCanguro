@@ -400,6 +400,18 @@ def test_real_data_integration() -> None:
     assert int(hw_ok_df["hardware_ok"].sum()) == 98
     assert int(hw_ok_df["hardware_ok_qc"].dropna().sum()) == 84
     assert int(hw_ok_df["hardware_ok_ref_completa"].sum()) == 93
+    assert int(hw_ok_df["hardware_ok_sex"].sum()) == 79
+    assert int(hw_ok_df["hardware_ok_3domain18"].sum()) == 99
+    assert int(hw_ok_df["hardware_ok_count"].sum()) == 77
 
     concordance = reports["calibracion_hardware_ok"]["nhpt_bimanual_concordance"]
-    assert 0.0 <= concordance["ref_pct_slower_than_mathiowetz_bimanual"] <= 100.0
+    # Referencia sin RCIU con NHPT lateralizado (n = 37), DEC-040.
+    assert concordance["ref_pct_slower_than_mathiowetz_right"] == pytest.approx(
+        100.0 * 34 / 37
+    )
+    assert concordance["ref_pct_slower_than_mathiowetz_left"] == pytest.approx(
+        100.0 * 32 / 37
+    )
+    assert concordance["ref_pct_slower_than_mathiowetz_bimanual"] == pytest.approx(
+        100.0 * 36 / 37
+    )
