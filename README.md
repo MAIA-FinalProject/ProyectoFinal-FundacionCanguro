@@ -351,6 +351,23 @@ docker compose -f deploy/docker-compose.yml up --build
 La guía del formulario, su payload y el procedimiento para agregar o quitar
 campos está en [`docs/inputs-paciente.md`](docs/inputs-paciente.md).
 
+El dashboard tiene dos páginas (ticket 5.3):
+
+- **Análisis poblacional** (página por defecto): grupos comparables, NHPT por grupo,
+  contraste de estructuras, calibración de `hardware_ok` y resultados por etapa del
+  5.2, incluido el análisis secundario ajustado por ICV del 5.6 si sus reportes existen. Lee solo los reportes agregados de `reports/hardware_ok/` y
+  `reports/incremental/`, que se versionan en Git y se copian a la imagen; la ruta se
+  puede cambiar con `DASHBOARD_REPORTS_DIR`. Si se regenera el pipeline, la página
+  muestra las cifras nuevas sin cambiar código.
+- **Formulario del paciente**: demostración técnica de la API; el modelo no supera
+  al azar (DEC-025, DEC-028).
+
+Para correrlo sin Docker, desde la raíz del repositorio:
+
+```bash
+PYTHONPATH=. uv run streamlit run dashboard/app.py
+```
+
 Compose construye ambos servicios desde la raíz del repositorio y los conecta a
 una red interna. El dashboard consulta la API mediante `API_BASE_URL` (en Compose,
 `http://api:8000`). Los puertos del host se enlazan a `127.0.0.1`; para acceder a

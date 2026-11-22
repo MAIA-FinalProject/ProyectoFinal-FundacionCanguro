@@ -14,6 +14,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY dashboard ./dashboard
 COPY contracts ./contracts
+# Reportes agregados (sin datos por sujeto) para la pestaña poblacional (5.3).
+COPY reports ./reports
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH="/app"

@@ -1066,7 +1066,7 @@ Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `increm
 - **Fecha:** 2026-11-21 · **Autor:** Andrés Romero · **Estado:** Aceptada
 - **Contexto / issue:** ticket 5.1.5; reemplaza la parte de DEC-029 sobre la retención de RCIU-Fenton y actualiza el ancla de DEC-031
 
-**Decisión.** El grupo de referencia a término es `ubicac == 3` **sin** los 12 sujetos con `rciu_fenton_ref == True`: 38 con NHPT completo y 28 con resonancia. Esta referencia es el ancla principal en `build_hardware_ok.py` (función `reference_mask`) para la Tabla 1, `z_nhpt_ref`, el contraste de las 80 ROIs y `hw_norm_score` / `hardware_ok`, incluidas sus variantes por sexo, de 18 métricas y por conteo. La referencia completa (49 con NHPT y 37 con resonancia) queda como sensibilidad, con el sufijo `_ref_completa` (`hw_norm_score_ref_completa`, `hardware_ok_ref_completa`, `hedges_g_ref_completa`, `n_ref_completa`, `ref_completa_mean_or_pct`).
+**Decisión.** El grupo de referencia a término es `ubicac == 3` **sin** los 12 sujetos con `rciu_fenton_ref == True`: 38 sujetos, de los cuales 37 tienen NHPT completo y 28 resonancia. Esta referencia es el ancla principal en `build_hardware_ok.py` (función `reference_mask`) para la Tabla 1, `z_nhpt_ref`, el contraste de las 80 ROIs y `hw_norm_score` / `hardware_ok`, incluidas sus variantes por sexo, de 18 métricas y por conteo. La referencia completa (49 con NHPT y 37 con resonancia) queda como sensibilidad, con el sufijo `_ref_completa` (`hw_norm_score_ref_completa`, `hardware_ok_ref_completa`, `hedges_g_ref_completa`, `n_ref_completa`, `ref_completa_mean_or_pct`).
 
 **Motivo.** El Profesor Tiberio confirmó que los RCIU-Fenton deben excluirse: la referencia debe representar a nacidos a término sin restricción de crecimiento, y los 12 son los más livianos del grupo (DEC-029). DEC-029 ya mostraba que excluirlos casi no cambia los tamaños de efecto (r = 0.985 entre ambas versiones), así que el cambio afecta sobre todo al ancla normativa.
 
@@ -1075,7 +1075,7 @@ Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `increm
 
 **Consecuencias.**
 - `hardware_ok` principal: 98/209 (46.9 %) en `fit_sample` y 84/168 (50.0 %) en `qc_ok`, frente a 93/209 (44.5 %) y 79/168 (47.0 %) con la referencia completa. Las demás sensibilidades quedan en `reports/hardware_ok/calibracion_hardware_ok.json`.
-- `z_nhpt_ref` se estandariza contra 38 referencias en lugar de 49.
+- `z_nhpt_ref` se estandariza contra 37 referencias con NHPT en lugar de 49.
 - La normativa se estima con 28 referencias con resonancia, y menos aún por sexo en la variante estratificada, así que es menos estable; la referencia completa permite comprobar que las conclusiones no dependen de ello.
 - El 5.2 (PR #45) debe volver a correrse con la etiqueta corregida, y la pestaña poblacional (5.3) debe leer los reportes regenerados.
 

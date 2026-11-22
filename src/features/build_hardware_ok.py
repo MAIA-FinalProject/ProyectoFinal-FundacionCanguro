@@ -4,7 +4,7 @@ Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico
 
 1. **Grupos comparables, Tabla 1 y caracterización del NHPT (DEC-029):**
    - Define el grupo de referencia a término (``ubicac == 3``, EG >= 37 sem, peso >= 2500 g)
-     **sin** los 12 sujetos con ``rciu_fenton_ref == True`` (DEC-040: ``n = 38`` con NHPT
+     **sin** los 12 sujetos con ``rciu_fenton_ref == True`` (DEC-040: ``n = 37`` con NHPT
      completo y ``n = 28`` con RM/DTI). La referencia completa (``n = 49`` y ``n = 37``) se
      conserva como sensibilidad (sufijo ``_ref_completa``).
    - Compara contra el grupo de prematuros ``< 1801 g`` con RM y NHPT completos
@@ -656,6 +656,8 @@ def characterize_nhpt(
     }
 
     group_defs: dict[str, pd.Series] = {
+        # Descriptivo: toda la referencia con NHPT, INCLUIDOS los RCIU-Fenton. La
+        # referencia principal (DEC-040) es "referencia_sin_rciu".
         "referencia_total_nhpt": (sub["ubicac"] == 3) & sub["nhpt_mean"].notna(),
         "referencia_mri_nhpt": reference_mask(sub)
         & sub["icv"].notna()
