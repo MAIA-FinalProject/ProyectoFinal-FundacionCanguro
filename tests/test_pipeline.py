@@ -43,6 +43,7 @@ def test_default_steps_are_well_formed():
         "imputacion",
         "ipw",
         "modelo_incremental",
+        "analisis_icv",
     ]
     # El paso de ingesta ya existe en el repo (ticket 1.2)
     ingesta = pipeline.STEPS[0]

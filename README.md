@@ -257,12 +257,29 @@ uv run python -m src.models.explore_incremental   # ~35 min; salida en reports/i
 
 **Para quien continúe (p. ej., el ticket de la herramienta de predicción):**
 - **El predictor real es perímetro cefálico + sexo.** Con solo esas dos variables se logra AUC 0.72 al nacer y 0.76 a los 12 meses. La aparente ganancia clínica temprana de DEC-038 era el sexo. Ninguna variable clínica adicional mostró aporte significativo (24 pruebas, p Holm ≥ 0.95).
-- **El sexo entra por la etiqueta.** Con `hardware_ok_sex` (normas por sexo, E3) agregar el sexo no aporta nada (Δ ≈ 0) y el AUC cae a ≈ 0.68. Antes de construir la herramienta hay que decidir con el equipo qué etiqueta es la principal; el análisis por ICV (5.6) ataca la misma pregunta.
+- **El sexo entra por la etiqueta.** Con `hardware_ok_sex` (normas por sexo, E3) agregar el sexo no aporta nada (Δ ≈ 0) y el AUC cae a ≈ 0.68. Antes de construir la herramienta hay que decidir con el equipo qué etiqueta es la principal; el análisis por ICV (DEC-042, abajo) muestra que la mayor parte de la señal es tamaño.
 - **Dos señales consistentes, pero no significativas, que conviene validar con datos nuevos:**
   - entrenar con `hw_norm_score` continuo da un AUC igual o algo mayor en todas las etapas (hasta +0.03);
   - el modelo parsimonioso (`PARSIMONIOUS_VARIABLES`) llega a AUC ≈ 0.79–0.80 entre los 6 y los 12 meses con 13 a 17 variables.
 - **No hay que elegir el modelo final comparando más variantes con estos mismos 209 sujetos**, porque se sobreajusta la validación. Cualquier variante nueva debe registrarse en `docs/decisiones.md` antes de correrla, como DEC-039.
 - **`hardware_ok` usa volúmenes absolutos**, así que en parte mide "cerebro grande" (DEC-036). Eso explica el peso del perímetro y del sexo, y debe explicarse junto a cualquier predicción.
+
+#### Análisis secundario ajustado por ICV (`src/models/secondary_icv.py`, DEC-042)
+
+Separa **tamaño** de **calidad**. La etiqueta `hardware_ok_icv` (en `hardware_ok.parquet`, generada por `build_hardware_ok.py`) usa los residuales de `volumen ~ ICV + sexo` ajustados en la referencia a término (28 sujetos con resonancia), con el mismo umbral de −1.0 DE robusta. Se comparan solo perímetro, perímetro + sexo y clínico con los mismos folds que DEC-038; el clínico lleva 500 permutaciones y Holm sobre 6 pruebas.
+
+```bash
+uv run python -m src.features.build_hardware_ok                                 # etiquetas (incluye _icv)
+uv run python -m src.models.secondary_icv --permutations 500 --sensitivity      # ~1.5 h; salida en reports/incremental/icv/
+uv run python -m src.pipeline --only analisis_icv                               # lo mismo, como paso del pipeline
+```
+
+**Resultado:**
+- Sin el tamaño, el clínico sigue superando al azar en las 6 etapas, pero con un AUC menor: 0.64–0.67, frente a 0.70–0.77 con `hardware_ok`.
+- El perímetro cefálico cae al borde del azar (0.60–0.63) y el sexo ya no aporta.
+- El clínico supera a las referencias en la media (+0.02 a +0.08), pero sin significancia.
+- Lectura prerregistrada: **"intermedio"**. Hay una señal modesta de calidad desde las 40 semanas, que no se puede atribuir a variables clínicas específicas con n = 209.
+- La prevalencia de la etiqueta depende de la referencia (133/209 sin RCIU-Fenton, 164/209 con la referencia completa): la recta se estima con pocos sujetos.
 
 ### Pipeline de extremo a extremo (`src/pipeline.py`)
 

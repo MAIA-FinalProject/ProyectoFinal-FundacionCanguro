@@ -73,6 +73,7 @@ Este documento registra las decisiones técnicas y metodológicas del proyecto: 
 | [DEC-039](#dec-039--análisis-exploratorio-post-hoc-desenlace-continuo-referencia-cabeza--sexo-y-modelo-parsimonioso) | Análisis exploratorio post hoc: desenlace continuo, referencia "cabeza + sexo" y modelo parsimonioso | Resultado | Aceptada (exploratorio) |
 | [DEC-040](#dec-040--la-referencia-a-término-excluye-a-los-rciu-fenton) | La referencia a término excluye a los RCIU-Fenton | Metodología | Aceptada |
 | [DEC-041](#dec-041--ajustes-del-52-tras-la-revisión-del-pr-y-la-nueva-referencia-dec-040) | Ajustes del 5.2 tras la revisión del PR y la nueva referencia (DEC-040) | Metodología | Aceptada |
+| [DEC-042](#dec-042--análisis-secundario-hardware_ok-ajustado-por-volumen-intracraneal) | Análisis secundario: `hardware_ok` ajustado por volumen intracraneal | Resultado | Aceptada (secundario) |
 
 ---
 
@@ -1107,3 +1108,84 @@ Los reportes están en `reports/incremental/exploratorio/` (`tabla.csv`, `increm
 - *Imputación por modelo:* las medias de los modelos de referencia casi no cambian, pero los IC de los Δ se estrechan (al nacer, el Δ vs solo cabeza pasa de [−0.016, 0.199] a [0.016, 0.168]).
 - *E3 (normas por sexo):* el Δ de `cabeza_sexo` frente a `solo_cabeza` está entre −0.015 y +0.007, con todos los IC conteniendo 0 (al nacer: −0.015 [−0.084, 0.053]). Según la regla fijada arriba, **el aporte del sexo en E2 se atribuye principalmente a la etiqueta**: los hombres tienen volúmenes absolutos mayores y la norma no estratificada los clasifica más a menudo como `hardware_ok`. En E3 el AUC baja a 0.57–0.71 en todos los modelos, y ni el clínico ni el parsimonioso superan a solo cabeza.
 - *Implicación:* el AUC ≈ 0.70 al nacer con la etiqueta principal se apoya en buena parte en el sexo. Elegir entre `hardware_ok` y `hardware_ok_sex` como desenlace principal es una pregunta de definición para el equipo y el director (¿la "estructura adecuada" debe juzgarse frente a normas del propio sexo?). Conviene resolverla junto con el análisis por ICV (5.6), que ataca el mismo problema de escala.
+
+---
+
+## DEC-042 — Análisis secundario: `hardware_ok` ajustado por volumen intracraneal
+
+- **Fecha:** 2026-11-21 · **Autor:** Martín Quintero · **Estado:** Aceptada (prerregistro y resultados abajo)
+- **Contexto / issue:** ticket 5.6 (issue #47), después del 5.2 (DEC-038, DEC-039 y DEC-041). Metodología aprobada por el equipo en la issue. Se registra **antes** de calcular la etiqueta nueva y de correr cualquier modelo.
+
+**Pregunta.** El 5.2 mostró que `hardware_ok` se predice casi solo con el perímetro cefálico y el sexo, porque la etiqueta usa volúmenes absolutos (DEC-031) y el sexo entra por las normas (DEC-041). Este análisis secundario pregunta si el primer año anticipa la **calidad** de la estructura motora o solo su **tamaño**.
+
+**Definición de la etiqueta (`hw_norm_score_icv`, `hardware_ok_icv`).** Las columnas `_icvadj` están vacías en la referencia (DEC-016), así que el ajuste se hace dentro de la referencia:
+1. Para cada uno de los 12 volúmenes de la etiqueta principal (`SHORTLIST_CORE_VOL_12`) se ajusta, por mínimos cuadrados ordinarios, `volumen ~ ICV + sexo` en la referencia a término sin RCIU-Fenton con resonancia (`reference_mask`, n = 28, DEC-040).
+2. Para todos los sujetos se calcula el residual respecto a esa recta.
+3. Cada residual se estandariza de forma robusta contra los residuales de la referencia (mediana y MAD escalada, como el DE_rob de DEC-031).
+4. Los 12 z se promedian, el compuesto se vuelve a estandarizar contra la referencia y se aplica el mismo umbral (`hw_norm_score_icv ≥ −1.0`).
+
+El volumen del tracto corticoespinal también se ajusta, para tener un criterio único en los 12 volúmenes. DEC-026 lo dejó absoluto en el índice `hw_motor` por pedido del comité clínico, porque es una trayectoria probabilística con relación débil con el ICV. Aquí el ajuste se estima en la propia referencia, así que una relación débil se traduce en una pendiente cercana a 0. Para respetar DEC-026 se agrega la sensibilidad con el tracto absoluto (abajo).
+
+Se exporta además un reporte agregado (`reports/hardware_ok/ajuste_icv_referencia.csv`) con la pendiente de ICV, el coeficiente de sexo, el R² y el n de cada volumen.
+
+**Sensibilidades de la etiqueta** (sin permutaciones, descriptivas):
+- `hardware_ok_icv_ref_completa`: la misma construcción con la referencia completa (37 sujetos con resonancia), porque la recta se estima con pocos sujetos.
+- `hardware_ok_icv_cst_abs`: los 10 volúmenes de sustancia gris ajustados y el tracto corticoespinal sin ajustar (DEC-026).
+
+**Modelos.** Elastic net logístico con las rejillas de DEC-033 e imputación MICE por fold, **solo con las columnas de cada modelo** (DEC-041):
+- `solo_cabeza`: perímetros cefálicos acumulados (DEC-036);
+- `cabeza_sexo`: perímetros + `BIRTH_sexo5` (DEC-039);
+- `clinico`: las variables completas de la etapa (DEC-034).
+
+El modelo parsimonioso de DEC-039 no entra: no responde la pregunta de tamaño frente a calidad.
+
+**Validación e inferencia.**
+- Los mismos 209 sujetos y los mismos folds del 5.2: CV anidada 5×5 estratificada por `hardware_ok` (no por la etiqueta nueva), semilla 42, 3 folds internos. Así las comparaciones con DEC-038 son pareadas. Se reporta la prevalencia de `hardware_ok_icv`.
+- *Prueba principal:* para el modelo `clinico` de cada etapa, 500 permutaciones (DEC-033) y Holm sobre esas **6 pruebas** (familia propia de este análisis). "Supera al azar" significa p Holm < 0.05 **y** límite inferior del IC 95% Nadeau–Bengio por encima de 0.5.
+- *Descriptivo:* AUC e IC de `solo_cabeza` y `cabeza_sexo`; Δ pareados (t corregida) del `clinico` frente a ambas referencias y frente a la etapa anterior; Δ de cada modelo frente al mismo modelo con la etiqueta principal (DEC-038 / DEC-039).
+
+**Interpretación fijada de antemano.**
+- Si `solo_cabeza` y `clinico` caen a un AUC cercano a 0.5, o el `clinico` no supera al azar según el criterio de arriba, **el primer año anticipa el tamaño de la estructura motora, no su calidad**. Es un resultado válido y reportable.
+- Si el `clinico` supera al azar y además supera a ambas referencias (Δ > 0 con IC que excluye 0), hay señal de **calidad** más allá del tamaño.
+- Los casos intermedios (supera al azar, pero no a las referencias) se reportan como señal de calidad no atribuible a variables clínicas más allá del crecimiento cefálico.
+- El perímetro cefálico y el ICV están correlacionados por construcción. Que el AUC del perímetro baje es justamente la hipótesis, no una falla del modelo.
+
+**Implementación.**
+- `build_hardware_ok.py`: columnas nuevas en `hardware_ok.parquet` y filas nuevas en `calibracion_hardware_ok.json`. Las columnas existentes no cambian.
+- `src/models/secondary_icv.py`: reutiliza folds, imputación, estimadores, permutaciones, t corregida y Holm de `train_incremental`, sin modificar el análisis principal. Reportes en `reports/incremental/icv/` (solo agregados).
+- Paso `analisis_icv` de `src/pipeline.py`, después de `modelo_incremental` (usa su tabla para el chequeo de reproducción), con `--sensitivity --permutations 500` (~1.5 h). Se puede correr solo con `uv run python -m src.pipeline --only analisis_icv`.
+
+**Consecuencias.** Es un análisis **secundario**: no reemplaza a DEC-038. Si no queda listo para el plazo de la issue, se documenta como trabajo futuro y no bloquea el informe.
+
+**Resultados (2026-11-21).** Corrida: `uv run python -m src.models.secondary_icv --permutations 500 --sensitivity`. El clínico con la etiqueta principal reproduce DEC-038 salvo el redondeo del CSV (|ΔAUC| máx = 4 × 10⁻⁵), así que las comparaciones son pareadas sobre los mismos folds. Los reportes están en `reports/incremental/icv/` (`tabla.csv`, `incrementos.csv`, `curva_icv.png` y `meta.json`) y el ajuste por volumen en `reports/hardware_ok/ajuste_icv_referencia.csv`.
+
+*La etiqueta.*
+- `hardware_ok_icv` tiene 133/209 positivos (63.6 %; 112/168 en `qc_ok`), frente a 98/209 de `hardware_ok`. Su correlación con `hw_norm_score` es r = 0.77; al ajustar, 46 sujetos pasan a "ok" y 11 dejan de serlo.
+- En la referencia, ICV + sexo explican del 5 % (tracto corticoespinal, BA4a izquierda) al 51 % (putamen) de la varianza de cada volumen.
+- `hardware_ok_icv_cst_abs` casi no cambia (132/209): el tracto tiene pendientes pequeñas, como anticipaba DEC-026.
+- `hardware_ok_icv_ref_completa` sube a 164/209 (78.5 %). Con 28 referencias la recta es inestable, y la prevalencia depende de qué referencia se use. Por eso las conclusiones se apoyan en el patrón, no en el nivel.
+
+*Desempeño (ROC-AUC fuera de muestra, IC 95% NB):*
+
+| Etapa | Clínico [IC] | p perm. / p Holm | Solo perímetro | Perímetro + sexo | Δ clínico vs solo perímetro [IC] | Δ clínico vs `hardware_ok` [IC] |
+|---|---|---|---|---|---|---|
+| Nacimiento | 0.635 [0.564, 0.707] | 0.006 / 0.036 | 0.618 | 0.607 | +0.017 [−0.064, 0.098] | −0.068 [−0.154, 0.020] |
+| 40 semanas | 0.668 [0.593, 0.744] | 0.006 / 0.036 | 0.595 | 0.585 | +0.074 [−0.035, 0.182] | −0.017 [−0.120, 0.086] |
+| 3 meses | 0.652 [0.573, 0.731] | 0.006 / 0.036 | 0.608 | 0.595 | +0.044 [−0.063, 0.150] | −0.094 [−0.203, 0.015] |
+| 6 meses | 0.652 [0.564, 0.740] | 0.008 / 0.036 | 0.619 | 0.612 | +0.033 [−0.090, 0.157] | −0.104 [−0.209, −0.000] |
+| 9 meses | 0.651 [0.557, 0.744] | 0.006 / 0.036 | 0.628 | 0.619 | +0.023 [−0.110, 0.156] | −0.117 [−0.211, −0.024] |
+| 12 meses | 0.637 [0.539, 0.736] | 0.006 / 0.036 | 0.623 | 0.614 | +0.015 [−0.118, 0.148] | −0.134 [−0.243, −0.025] |
+
+- **El clínico supera al azar en las 6 etapas** (Holm = 0.036, límite inferior del IC > 0.5), con AUC de 0.64 a 0.67. La curva es plana desde las 40 semanas: los perímetros posteriores no agregan nada.
+- **Las referencias caen al borde del azar.** Solo perímetro queda en 0.60–0.63 y perímetro + sexo en 0.59–0.62, con límites inferiores del IC entre 0.48 y 0.51. Frente a la etiqueta principal, el perímetro pierde hasta 0.12 de AUC desde los 3 meses: casi toda su señal era tamaño.
+- **El sexo deja de aportar** (Δ perímetro + sexo vs solo perímetro entre −0.014 y −0.007), igual que en E3 (DEC-041).
+- **El clínico no supera a las referencias de forma demostrable.** Los Δ son positivos en todas las etapas (+0.015 a +0.074 frente a solo perímetro; +0.023 a +0.084 frente a perímetro + sexo), pero todos los IC cruzan 0.
+- **Sensibilidades:** el patrón se repite. Con la referencia completa, el clínico da 0.65–0.68 y las referencias 0.56–0.62; con el tracto absoluto, 0.61–0.66 y 0.59–0.62. En ambas, los Δ del clínico frente a las referencias son positivos (hasta +0.12) y sus IC cruzan 0.
+
+**Interpretación (regla fijada arriba): "intermedio" en las 6 etapas.** Una vez descontado el tamaño cerebral, el primer año todavía anticipa algo de la estructura motora a los 20 años (AUC ≈ 0.65, superior al azar tras Holm). Esa señal no se puede atribuir a variables clínicas específicas más allá del crecimiento cefálico: el clínico supera a las referencias en la media, pero no con la precisión que da n = 209.
+
+**Conclusión para la tesis.**
+1. La mayor parte de la predictibilidad de `hardware_ok` (AUC ≈ 0.77, DEC-038) es **tamaño**: el perímetro cefálico y el sexo predicen el volumen absoluto. Al quitar el tamaño, el AUC del clínico baja ≈ 0.10 desde los 6 meses.
+2. Queda una señal modesta de **calidad** (AUC ≈ 0.65), presente ya a las 40 semanas y estable después, que sobrevive a la corrección por multiplicidad. En las dos sensibilidades de la etiqueta, el IC del clínico también excluye el azar en todas las etapas (límite inferior 0.55–0.60; sin permutaciones, por diseño).
+3. No es posible decir qué variables clínicas la llevan. Identificarlas requiere más muestra o validación externa.
+4. Para la pregunta de definición abierta en DEC-041 (normas comunes, por sexo o ajustadas por ICV), este resultado sugiere reportar `hardware_ok` como desenlace principal y `hardware_ok_icv` como el análisis que separa tamaño de calidad. La decisión final es del equipo y el director.
