@@ -12,6 +12,7 @@ from dashboard import population as pop
 
 CLINICAL_COLOR = "#2a78d6"
 HEAD_COLOR = "#eb6834"
+HEAD_SEX_COLOR = "#1baf7a"
 NEUTRAL = "#8a8a8a"
 
 st.title("Análisis poblacional")
@@ -194,6 +195,11 @@ scenarios = {
         "etiqueta_sexo": "Etiqueta con normas por sexo",
         "etiqueta_ref_completa": "Etiqueta con referencia completa",
         "ipw": "Ponderado por IPW",
+        **(
+            {"icv": "Ajustada por ICV y sexo (5.6, secundario)"}
+            if reports.icv is not None
+            else {}
+        ),
     },
     "nhpt": {"principal": "Principal", "submuestra_rm": "Submuestra con resonancia"},
 }[outcome]
@@ -204,11 +210,16 @@ target = {
     "submuestra_rm": "nhpt_mri",
 }.get(scenario, outcome)
 
-curve = pop.stage_curve(reports.etapas, target, scenario)
+if scenario == "icv" and reports.icv is not None:
+    curve = pop.icv_curve(reports.icv)
+else:
+    curve = pop.stage_curve(reports.etapas, target, scenario)
 metric_title = "ROC-AUC" if outcome == "hardware_ok" else "R² fuera de muestra"
-model_scale = alt.Scale(
-    domain=list(pop.MODEL_LABELS.values()), range=[CLINICAL_COLOR, HEAD_COLOR]
+model_colors = dict(
+    zip(pop.MODEL_LABELS.values(), [CLINICAL_COLOR, HEAD_COLOR, HEAD_SEX_COLOR])
 )
+shown = [m for m in model_colors if m in set(curve["Modelo"])]
+model_scale = alt.Scale(domain=shown, range=[model_colors[m] for m in shown])
 color = alt.Color(
     "Modelo:N", scale=model_scale, legend=alt.Legend(orient="bottom", title=None)
 )
@@ -251,14 +262,28 @@ chance = (
 )
 st.altair_chart((line + band + chance).properties(height=320), use_container_width=True)
 
-if outcome == "hardware_ok":
+if scenario == "icv" and reports.icv_meta is not None:
+    readings = pop.icv_reading(reports.icv_meta)
+    distinct = sorted(set(readings.values()))
+    reading_text = (
+        f"**{distinct[0]}** en las {len(readings)} etapas"
+        if len(distinct) == 1
+        else ", ".join(f"{stage}: {r}" for stage, r in readings.items())
+    )
+    st.markdown(
+        "Análisis secundario: la etiqueta descuenta el volumen intracraneal y el sexo "
+        "(DEC-042). Sin el tamaño, el perímetro cefálico cae cerca del azar y el sexo deja "
+        "de aportar; el modelo clínico conserva una señal modesta que supera al azar, pero "
+        "no se puede atribuir a variables clínicas específicas. Lectura prerregistrada: "
+        f"{reading_text}."
+    )
+elif outcome == "hardware_ok":
     st.markdown(
         "La estructura motora a los 20 años se anticipa moderadamente desde el nacimiento, "
         "pero casi toda la señal viene del **perímetro cefálico y el sexo**; las demás "
         "variables clínicas no aportan de forma significativa (DEC-038, DEC-039). Con normas "
-        "por sexo el sexo deja de aportar (DEC-041), y el análisis ajustado por volumen "
-        "intracraneal (5.6) indicará si la señal es de calidad de la estructura o solo de "
-        "tamaño."
+        "por sexo el sexo deja de aportar (DEC-041). El escenario ajustado por ICV (5.6) "
+        "separa el tamaño de la calidad de la estructura."
     )
 else:
     st.markdown(

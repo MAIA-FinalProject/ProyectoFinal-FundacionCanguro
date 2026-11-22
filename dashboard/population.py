@@ -45,6 +45,7 @@ STAGE_LABELS = {
 MODEL_LABELS = {
     "clinico": "Variables clínicas",
     "solo_cabeza": "Solo perímetro cefálico",
+    "cabeza_sexo": "Perímetro + sexo",
 }
 
 # Grupos del NHPT que se muestran: la referencia principal es la de DEC-040 (sin RCIU).
@@ -93,7 +94,21 @@ CRITERIA_LABELS = {
     "hardware_ok_sex_vol12_ge_m1sd": "Normas por sexo",
     "hardware_ok_3domain18_ge_m1sd": "18 métricas (incluye FA y RD)",
     "hardware_ok_count_le2_of_12": "Conteo: ≤ 2 de 12 volúmenes bajo −1 DE",
+    "hardware_ok_icv_vol12_ge_m1sd": "Ajustada por ICV y sexo (5.6, secundario)",
+    "hardware_ok_icv_ref_completa_vol12_ge_m1sd": "Ajustada por ICV, referencia completa",
+    "hardware_ok_icv_cst_abs_vol12_ge_m1sd": "Ajustada por ICV, tracto absoluto",
     "rejected_strict_intersection_0_of_12": "Descartado: los 12 volúmenes en rango",
+}
+
+# Análisis secundario ajustado por ICV (ticket 5.6, DEC-042). Opcional.
+ICV_FILES = {
+    "tabla": "incremental/icv/tabla.csv",
+    "meta": "incremental/icv/meta.json",
+}
+ICV_READINGS = {
+    "calidad": "calidad",
+    "intermedio": "intermedio",
+    "tamaño": "tamaño",
 }
 
 
@@ -106,6 +121,8 @@ class PopulationReports:
     etapas: pd.DataFrame
     incrementos: pd.DataFrame
     reports_dir: Path
+    icv: pd.DataFrame | None = None
+    icv_meta: dict[str, Any] | None = None
 
     def image(self, name: str) -> Path | None:
         path = self.reports_dir / CURVE_IMAGES[name]
@@ -128,6 +145,11 @@ def load_reports(reports_dir: Path = REPORTS_DIR) -> PopulationReports:
         )
     with open(reports_dir / HARDWARE_FILES["calibracion"], encoding="utf-8") as fh:
         calibracion = json.load(fh)
+    icv, icv_meta = None, None
+    if all((reports_dir / rel).exists() for rel in ICV_FILES.values()):
+        icv = pd.read_csv(reports_dir / ICV_FILES["tabla"])
+        with open(reports_dir / ICV_FILES["meta"], encoding="utf-8") as fh:
+            icv_meta = json.load(fh)
     return PopulationReports(
         tabla1=pd.read_csv(reports_dir / HARDWARE_FILES["tabla1"]),
         nhpt=pd.read_csv(reports_dir / HARDWARE_FILES["nhpt"]),
@@ -136,6 +158,8 @@ def load_reports(reports_dir: Path = REPORTS_DIR) -> PopulationReports:
         etapas=pd.read_csv(reports_dir / INCREMENTAL_FILES["etapas"]),
         incrementos=pd.read_csv(reports_dir / INCREMENTAL_FILES["incrementos"]),
         reports_dir=reports_dir,
+        icv=icv,
+        icv_meta=icv_meta,
     )
 
 
@@ -308,6 +332,29 @@ def stage_curve(
     ].copy()
     if rows.empty:
         raise ValueError(f"No hay resultados para {escenario}/{desenlace}.")
+    return _format_curve(rows)
+
+
+def icv_curve(icv: pd.DataFrame, etiqueta: str = "hardware_ok_icv") -> pd.DataFrame:
+    """Curva por etapa del análisis ajustado por ICV (5.6): clínico y dos referencias."""
+    rows = icv.loc[icv["etiqueta"].eq(etiqueta)].copy()
+    if rows.empty:
+        raise ValueError(f"No hay resultados del 5.6 para {etiqueta}.")
+    return _format_curve(rows)
+
+
+def icv_reading(icv_meta: dict[str, Any]) -> dict[str, str]:
+    """Lectura prerregistrada por etapa (calidad, intermedio o tamaño), DEC-042."""
+    readings = icv_meta.get("interpretacion_por_etapa", {})
+    return {
+        STAGE_LABELS[stage]: readings[stage]
+        for stage in STAGE_ORDER
+        if stage in readings
+    }
+
+
+def _format_curve(rows: pd.DataFrame) -> pd.DataFrame:
+    rows = rows.copy()
     rows["orden"] = rows["etapa"].map({s: i for i, s in enumerate(STAGE_ORDER)})
     rows["Etapa"] = rows["etapa"].map(STAGE_LABELS)
     rows["Modelo"] = rows["modelo"].map(MODEL_LABELS)

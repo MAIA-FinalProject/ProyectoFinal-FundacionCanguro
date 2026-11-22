@@ -355,7 +355,7 @@ El dashboard tiene dos páginas (ticket 5.3):
 
 - **Análisis poblacional** (página por defecto): grupos comparables, NHPT por grupo,
   contraste de estructuras, calibración de `hardware_ok` y resultados por etapa del
-  5.2. Lee solo los reportes agregados de `reports/hardware_ok/` y
+  5.2, incluido el análisis secundario ajustado por ICV del 5.6 si sus reportes existen. Lee solo los reportes agregados de `reports/hardware_ok/` y
   `reports/incremental/`, que se versionan en Git y se copian a la imagen; la ruta se
   puede cambiar con `DASHBOARD_REPORTS_DIR`. Si se regenera el pipeline, la página
   muestra las cifras nuevas sin cambiar código.

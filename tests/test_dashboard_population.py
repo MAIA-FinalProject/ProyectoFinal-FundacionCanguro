@@ -149,3 +149,43 @@ def test_entrypoint_defaults_to_population_page() -> None:
 def test_curve_values_are_aggregates(reports: pop.PopulationReports) -> None:
     curve = pop.stage_curve(reports.etapas, "hardware_ok")
     assert pd.api.types.is_float_dtype(curve["media"])
+
+
+def test_icv_secondary_analysis_is_loaded(reports: pop.PopulationReports) -> None:
+    assert reports.icv is not None and reports.icv_meta is not None
+    curve = pop.icv_curve(reports.icv)
+    assert len(curve) == 18  # 6 etapas x 3 modelos
+    assert set(curve["Modelo"]) == set(pop.MODEL_LABELS.values())
+    readings = pop.icv_reading(reports.icv_meta)
+    assert list(readings) == list(pop.STAGE_LABELS.values())
+    assert set(readings.values()) <= set(pop.ICV_READINGS)
+
+
+def test_icv_curve_unknown_label_raises(reports: pop.PopulationReports) -> None:
+    assert reports.icv is not None
+    with pytest.raises(ValueError, match="5.6"):
+        pop.icv_curve(reports.icv, "no_existe")
+
+
+def test_icv_is_optional(tmp_path: Path) -> None:
+    import shutil
+
+    shutil.copytree(ROOT / "reports", tmp_path / "reports")
+    shutil.rmtree(tmp_path / "reports" / "incremental" / "icv")
+    loaded = pop.load_reports(tmp_path / "reports")
+    assert loaded.icv is None and loaded.icv_meta is None
+
+
+def test_calibration_includes_icv_labels(reports: pop.PopulationReports) -> None:
+    table = pop.calibration_table(reports.calibracion)
+    assert "Ajustada por ICV y sexo (5.6, secundario)" in set(table["Criterio"])
+
+
+def test_population_page_shows_icv_scenario() -> None:
+    app = AppTest.from_file(
+        str(ROOT / "dashboard" / "poblacional.py"), default_timeout=60
+    )
+    app.run()
+    app.selectbox[0].set_value("icv").run()
+    assert not app.exception
+    assert any("Lectura prerregistrada" in m.value for m in app.markdown)
