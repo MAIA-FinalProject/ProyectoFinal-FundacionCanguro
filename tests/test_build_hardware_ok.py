@@ -237,7 +237,7 @@ def test_compute_normative_hardware_ok_vol12_primary_and_sex_sensitivity(
     assert int((~hw_ok_df["qc_ok"]).sum()) == 5
     assert hw_ok_df.loc[~hw_ok_df["qc_ok"], "hardware_ok_qc"].isna().all()
     assert hw_ok_df.loc[hw_ok_df["qc_ok"], "hardware_ok_qc"].notna().all()
-    assert len(cal_df) == 6
+    assert len(cal_df) == 9
 
 
 def test_missing_norm_score_preserves_na_in_boolean_labels(
@@ -400,6 +400,94 @@ def test_real_data_integration() -> None:
     assert int(hw_ok_df["hardware_ok"].sum()) == 98
     assert int(hw_ok_df["hardware_ok_qc"].dropna().sum()) == 84
     assert int(hw_ok_df["hardware_ok_ref_completa"].sum()) == 93
+    # Análisis secundario ajustado por ICV y sexo en la referencia (DEC-042).
+    assert int(hw_ok_df["hardware_ok_icv"].sum()) == 133
+    assert int(hw_ok_df["hardware_ok_icv_ref_completa"].sum()) == 164
+    assert int(hw_ok_df["hardware_ok_icv_cst_abs"].sum()) == 132
+    assert hw_ok_df["hardware_ok_icv"].notna().all()
+    icv_fit = reports["ajuste_icv_referencia"]
+    assert len(icv_fit) == 12 and (icv_fit["n_ref"] == 28).all()
 
     concordance = reports["calibracion_hardware_ok"]["nhpt_bimanual_concordance"]
     assert 0.0 <= concordance["ref_pct_slower_than_mathiowetz_bimanual"] <= 100.0
+
+
+# --------------------------------------------------------------------------- #
+# Análisis secundario ajustado por ICV (DEC-042)
+# --------------------------------------------------------------------------- #
+def _icv_frame(seed: int = 0) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """Volúmenes = recta exacta en ICV y sexo + un término de calidad independiente."""
+    rng = np.random.default_rng(seed)
+    n_ref, n_pre = 30, 120
+    n = n_ref + n_pre
+    is_ref = np.r_[np.ones(n_ref, bool), np.zeros(n_pre, bool)]
+    icv = np.where(is_ref, rng.normal(1.27e6, 8e4, n), rng.normal(1.17e6, 9e4, n))
+    sex = rng.choice([1, 2], size=n)
+    quality = rng.normal(0, 1, n)
+    df = pd.DataFrame(
+        {"icv": icv, "BIRTH_sexo5": sex, "ubicac": np.where(is_ref, 3, 1)}
+    )
+    for i, col in enumerate(bho.SHORTLIST_CORE_VOL_12):
+        slope = 0.004 + 0.0005 * i
+        df[col] = 500.0 + slope * icv + 80.0 * (sex == 2) + 100.0 * quality
+    return df, pd.Series(is_ref, index=df.index), pd.Series(quality, index=df.index)
+
+
+def test_icv_reference_fit_recovers_slopes_and_reports_aggregates() -> None:
+    df, ref, _ = _icv_frame()
+    coefs = bho.fit_icv_reference_models(df, ref, bho.SHORTLIST_CORE_VOL_12)
+    assert list(coefs["estructura"]) == list(bho.SHORTLIST_CORE_VOL_12)
+    assert (coefs["n_ref"] == 30).all()
+    # La calidad es ruido independiente: la pendiente se recupera con error pequeño.
+    expected = 0.004 + 0.0005 * np.arange(12)
+    assert np.allclose(coefs["pendiente_icv"], expected, atol=0.0015)
+    assert "code" not in coefs.columns
+
+
+def test_icv_score_removes_size_and_keeps_quality() -> None:
+    df, ref, quality = _icv_frame()
+    absolute, _ = bho._compute_reference_anchored_score(
+        df, ref, bho.SHORTLIST_CORE_VOL_12
+    )
+    adjusted = bho._compute_icv_adjusted_score(df, ref, bho.SHORTLIST_CORE_VOL_12)
+    pre = ~ref
+    # El puntaje absoluto mezcla tamaño; el ajustado sigue a la calidad.
+    assert abs(np.corrcoef(absolute[pre], df.loc[pre, "icv"])[0, 1]) > 0.3
+    assert np.corrcoef(adjusted[pre], quality[pre])[0, 1] > 0.9
+    assert (
+        np.corrcoef(adjusted[pre], quality[pre])[0, 1]
+        > np.corrcoef(absolute[pre], quality[pre])[0, 1]
+    )
+    # En la referencia, los residuales de MCO son ortogonales al ICV y el puntaje
+    # es una combinación afín de ellos: correlación exactamente nula.
+    assert abs(np.corrcoef(adjusted[ref], df.loc[ref, "icv"])[0, 1]) < 1e-8
+    # Re-estandarizado contra la referencia: mediana 0.
+    assert abs(float(adjusted[ref].median())) < 1e-9
+
+
+def test_icv_score_invariant_to_brain_scaling_along_the_line() -> None:
+    df, ref, _ = _icv_frame()
+    base = bho._compute_icv_adjusted_score(df, ref, bho.SHORTLIST_CORE_VOL_12)
+    coefs = bho.fit_icv_reference_models(df, ref, bho.SHORTLIST_CORE_VOL_12)
+    moved = df.copy()
+    k = int(np.flatnonzero(~ref.to_numpy())[0])
+    delta_icv = 1.5e5  # cerebro más grande, misma posición respecto a la recta
+    moved.loc[k, "icv"] += delta_icv
+    for row in coefs.itertuples(index=False):
+        moved.loc[k, row.estructura] += row.pendiente_icv * delta_icv
+    shifted = bho._compute_icv_adjusted_score(moved, ref, bho.SHORTLIST_CORE_VOL_12)
+    assert shifted.iloc[k] == pytest.approx(base.iloc[k], abs=1e-9)
+
+
+def test_icv_score_missing_icv_gives_na_and_cst_abs_keeps_tract() -> None:
+    df, ref, _ = _icv_frame()
+    k = int(np.flatnonzero(~ref.to_numpy())[0])
+    df.loc[k, "icv"] = np.nan
+    score = bho._compute_icv_adjusted_score(df, ref, bho.SHORTLIST_CORE_VOL_12)
+    assert np.isnan(score.iloc[k]) and score.drop(index=k).notna().all()
+    gm = [c for c in bho.SHORTLIST_CORE_VOL_12 if c not in bho.CST_VOLUMES]
+    coefs = bho.fit_icv_reference_models(
+        df, ref, bho.SHORTLIST_CORE_VOL_12, adjusted=gm
+    ).set_index("estructura")
+    assert (coefs.loc[list(bho.CST_VOLUMES), "pendiente_icv"] == 0).all()
+    assert (coefs.loc[gm, "pendiente_icv"] != 0).all()

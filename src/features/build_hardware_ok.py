@@ -32,6 +32,9 @@ Consolida los pasos analíticos 4.3, 4.4 y 4.5 acordados con el experto clínico
      pérdida de fibras cruzadas en FA/RD), y exporta las sensibilidades ``hardware_ok_qc``,
      ``hardware_ok_ref_completa``, ``hardware_ok_sex`` (normas estratificadas por sexo),
      ``hardware_ok_3domain18`` (18 métricas incluyendo FA y RD) y ``hardware_ok_count``.
+   - Análisis secundario (DEC-042): ``hardware_ok_icv`` sobre los residuales de
+     ``volumen ~ ICV + sexo`` ajustados en la referencia, con sus sensibilidades
+     ``_icv_ref_completa`` y ``_icv_cst_abs`` (tracto corticoespinal absoluto, DEC-026).
 
 4. **Salidas (sin filas individuales en reportes, DEC-001 / DEC-005):**
    - ``data/features/hardware_ok.parquet``: features por sujeto para el Ticket #33.
@@ -48,7 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -165,7 +168,17 @@ OUTPUT_COLS: list[str] = [
     "hardware_ok_count",
     "nhpt_mean",
     "z_nhpt_ref",
+    # Análisis secundario ajustado por ICV (DEC-042).
+    "hw_norm_score_icv",
+    "hw_norm_score_icv_ref_completa",
+    "hw_norm_score_icv_cst_abs",
+    "hardware_ok_icv",
+    "hardware_ok_icv_ref_completa",
+    "hardware_ok_icv_cst_abs",
 ]
+
+# Volúmenes del tracto corticoespinal: absolutos en la sensibilidad de DEC-026.
+CST_VOLUMES = ("cst_lh_vol", "cst_rh_vol")
 
 
 # --------------------------------------------------------------------------- #
@@ -1090,6 +1103,101 @@ def _compute_sex_stratified_reference_score(
     return out_score
 
 
+def _icv_design(df: pd.DataFrame) -> np.ndarray:
+    """Matriz [1, ICV, hombre] para el ajuste por ICV y sexo (DEC-042)."""
+    sex = pd.to_numeric(df["BIRTH_sexo5"], errors="coerce")
+    return np.column_stack(
+        [
+            np.ones(len(df)),
+            df["icv"].to_numpy(dtype=float),
+            sex.eq(2).astype(float).to_numpy(),
+        ]
+    )
+
+
+def fit_icv_reference_models(
+    df_all: pd.DataFrame,
+    ref_mask: pd.Series,
+    components: Mapping[str, int],
+    adjusted: Collection[str] | None = None,
+) -> pd.DataFrame:
+    """Ajusta ``volumen ~ ICV + sexo`` por MCO en la referencia (DEC-042).
+
+    Devuelve una fila por volumen con los coeficientes, el R² y el n de la
+    referencia (solo agregados). Los volúmenes fuera de ``adjusted`` (por defecto
+    se ajustan todos) quedan con pendientes nulas: equivale a no ajustarlos.
+    """
+    adjusted = set(components) if adjusted is None else set(adjusted)
+    ref_df = df_all.loc[ref_mask]
+    rows: list[dict[str, Any]] = []
+    for col in components:
+        if col not in df_all.columns:
+            raise ValueError(f"Falta la estructura '{col}' para el ajuste por ICV.")
+        ok = ref_df[col].notna() & ref_df["icv"].notna()
+        ok &= pd.to_numeric(ref_df["BIRTH_sexo5"], errors="coerce").isin(
+            VALID_SEX_CODES
+        )
+        sub = ref_df.loc[ok]
+        if len(sub) < 4:
+            raise ValueError(
+                f"Referencia insuficiente (n={len(sub)}) para ajustar '{col}' por ICV."
+            )
+        y = sub[col].to_numpy(dtype=float)
+        if col in adjusted:
+            X = _icv_design(sub)
+            coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+            fitted = X @ coef
+            ss_res = float(((y - fitted) ** 2).sum())
+            ss_tot = float(((y - y.mean()) ** 2).sum())
+            r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
+        else:
+            coef = np.array([float(y.mean()), 0.0, 0.0])
+            r2 = 0.0
+        rows.append(
+            {
+                "estructura": col,
+                "ajustada": col in adjusted,
+                "n_ref": len(sub),
+                "intercepto": float(coef[0]),
+                "pendiente_icv": float(coef[1]),
+                "coef_hombre": float(coef[2]),
+                "r2_ref": float(r2),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _compute_icv_adjusted_score(
+    df_all: pd.DataFrame,
+    ref_mask: pd.Series,
+    components: Mapping[str, int],
+    adjusted: Collection[str] | None = None,
+) -> pd.Series:
+    """Puntaje normativo sobre residuales de ``volumen ~ ICV + sexo`` (DEC-042).
+
+    Cada residual se estandariza (mediana/MAD) contra los residuales de la
+    referencia; el promedio de los z se vuelve a estandarizar contra la referencia,
+    igual que ``hw_norm_score`` (DEC-031). Un ICV o sexo faltante da ``NaN``.
+    """
+    coefs = fit_icv_reference_models(df_all, ref_mask, components, adjusted)
+    sex = pd.to_numeric(df_all["BIRTH_sexo5"], errors="coerce")
+    valid = df_all["icv"].notna() & sex.isin(VALID_SEX_CODES)
+    X = _icv_design(df_all)
+    z_dict: dict[str, pd.Series] = {}
+    for row in coefs.itertuples(index=False):
+        col = str(row.estructura)
+        beta = np.array([row.intercepto, row.pendiente_icv, row.coef_hombre])
+        resid = pd.Series(
+            df_all[col].to_numpy(dtype=float) - X @ beta, index=df_all.index, name=col
+        ).where(valid)
+        ref_resid = resid.loc[ref_mask]
+        z_dict[col] = float(components[col]) * _robust_standardize(resid, ref_resid)
+    z_mat = pd.DataFrame(z_dict, index=df_all.index)
+    raw = z_mat.mean(axis=1, skipna=False)
+    raw.name = "raw_composite_icv"
+    return _robust_standardize(raw, raw.loc[ref_mask])
+
+
 def compute_normative_hardware_ok(
     merged_df: pd.DataFrame,
     components: dict[str, int] = SHORTLIST_CORE_VOL_12,
@@ -1167,6 +1275,22 @@ def compute_normative_hardware_ok(
     work["hw_norm_score_3domain18"] = score_3domain18
     work["n_impaired_structures"] = n_impaired
 
+    # 7. Análisis secundario ajustado por ICV y sexo dentro de la referencia (DEC-042).
+    gm_only = [c for c in components if c not in CST_VOLUMES]
+    work["hw_norm_score_icv"] = _compute_icv_adjusted_score(
+        merged_df, ref_mask, components
+    )
+    work["hw_norm_score_icv_ref_completa"] = _compute_icv_adjusted_score(
+        merged_df, ref_full_mask, components
+    )
+    work["hw_norm_score_icv_cst_abs"] = _compute_icv_adjusted_score(
+        merged_df, ref_mask, components, adjusted=gm_only
+    )
+    for suffix in ("icv", "icv_ref_completa", "icv_cst_abs"):
+        work[f"hardware_ok_{suffix}"] = _score_to_nullable_bool(
+            work[f"hw_norm_score_{suffix}"], threshold
+        )
+
     work["hardware_ok"] = _score_to_nullable_bool(work["hw_norm_score"], threshold)
     work["hardware_ok_qc"] = work["hardware_ok"].where(work["qc_ok"].eq(True), pd.NA)
     work["hardware_ok_ref_completa"] = _score_to_nullable_bool(
@@ -1221,6 +1345,21 @@ def compute_normative_hardware_ok(
             "hardware_ok_count_le2_of_12",
             fit_out["hardware_ok_count"],
             qc_sub["hardware_ok_count"],
+        ),
+        (
+            "hardware_ok_icv_vol12_ge_m1sd",
+            fit_out["hardware_ok_icv"],
+            qc_sub["hardware_ok_icv"],
+        ),
+        (
+            "hardware_ok_icv_ref_completa_vol12_ge_m1sd",
+            fit_out["hardware_ok_icv_ref_completa"],
+            qc_sub["hardware_ok_icv_ref_completa"],
+        ),
+        (
+            "hardware_ok_icv_cst_abs_vol12_ge_m1sd",
+            fit_out["hardware_ok_icv_cst_abs"],
+            qc_sub["hardware_ok_icv_cst_abs"],
         ),
         (
             "rejected_strict_intersection_0_of_12",
@@ -1300,7 +1439,11 @@ def build_hardware_ok_pipeline(
     )
     assoc_df = analyze_structure_nhpt_association(merged_with_scores)
 
+    ref_icv = reference_mask(merged) & merged["icv"].notna()
+    icv_fit_df = fit_icv_reference_models(merged, ref_icv, SHORTLIST_CORE_VOL_12)
+
     reports: dict[str, Any] = {
+        "ajuste_icv_referencia": icv_fit_df,
         "tabla1_cohortes": table1_df,
         "nhpt_por_grupo": nhpt_summary_df,
         "contraste_80_rois_absolutas": roi_contrast_df,
@@ -1333,6 +1476,7 @@ def export_outputs(
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     for key in (
+        "ajuste_icv_referencia",
         "tabla1_cohortes",
         "nhpt_por_grupo",
         "contraste_80_rois_absolutas",
