@@ -8,20 +8,19 @@ módulo recibe ni devuelve filas de participantes (DEC-001 y DEC-005).
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-DEFAULT_REPORTS_DIR = Path(__file__).resolve().parents[1] / "reports"
-REPORTS_DIR = Path(os.getenv("DASHBOARD_REPORTS_DIR", str(DEFAULT_REPORTS_DIR)))
+from settings import DashboardSettings
 
 HARDWARE_FILES = {
     "tabla1": "hardware_ok/tabla1_cohortes.csv",
     "nhpt": "hardware_ok/nhpt_por_grupo.csv",
     "contraste": "hardware_ok/contraste_80_rois_absolutas.csv",
+    "asociacion": "hardware_ok/asociacion_estructura_nhpt.csv",
     "calibracion": "hardware_ok/calibracion_hardware_ok.json",
 }
 INCREMENTAL_FILES = {
@@ -46,6 +45,21 @@ MODEL_LABELS = {
     "clinico": "Variables clínicas",
     "solo_cabeza": "Solo perímetro cefálico",
     "cabeza_sexo": "Perímetro + sexo",
+}
+SCENARIOS = {
+    "hardware_ok": {
+        "principal": ("hardware_ok", "Principal"),
+        "etiqueta_sexo": ("hardware_ok_sex", "Etiqueta con normas por sexo"),
+        "etiqueta_ref_completa": (
+            "hardware_ok_ref_completa",
+            "Etiqueta con referencia completa",
+        ),
+        "ipw": ("hardware_ok", "Ponderado por IPW"),
+    },
+    "nhpt": {
+        "principal": ("nhpt", "Principal"),
+        "submuestra_rm": ("nhpt_mri", "Submuestra con resonancia"),
+    },
 }
 
 # Grupos del NHPT que se muestran: la referencia principal es la de DEC-040 (sin RCIU).
@@ -117,6 +131,7 @@ class PopulationReports:
     tabla1: pd.DataFrame
     nhpt: pd.DataFrame
     contraste: pd.DataFrame
+    asociacion: pd.DataFrame
     calibracion: dict[str, Any]
     etapas: pd.DataFrame
     incrementos: pd.DataFrame
@@ -129,13 +144,15 @@ class PopulationReports:
         return path if path.exists() else None
 
 
-def load_reports(reports_dir: Path = REPORTS_DIR) -> PopulationReports:
+def load_reports(reports_dir: Path | None = None) -> PopulationReports:
     """Lee los reportes agregados.
 
     Raises:
         FileNotFoundError: con la lista de archivos que faltan.
     """
-    reports_dir = Path(reports_dir)
+    if reports_dir is None:
+        reports_dir = DashboardSettings().dashboard_reports_dir
+    reports_dir = Path(reports_dir).expanduser()
     files = {**HARDWARE_FILES, **INCREMENTAL_FILES}
     missing = [rel for rel in files.values() if not (reports_dir / rel).exists()]
     if missing:
@@ -154,6 +171,7 @@ def load_reports(reports_dir: Path = REPORTS_DIR) -> PopulationReports:
         tabla1=pd.read_csv(reports_dir / HARDWARE_FILES["tabla1"]),
         nhpt=pd.read_csv(reports_dir / HARDWARE_FILES["nhpt"]),
         contraste=pd.read_csv(reports_dir / HARDWARE_FILES["contraste"]),
+        asociacion=pd.read_csv(reports_dir / HARDWARE_FILES["asociacion"]),
         calibracion=calibracion,
         etapas=pd.read_csv(reports_dir / INCREMENTAL_FILES["etapas"]),
         incrementos=pd.read_csv(reports_dir / INCREMENTAL_FILES["incrementos"]),
@@ -289,6 +307,56 @@ def n_significant_rois(contraste: pd.DataFrame, alpha: float = 0.05) -> tuple[in
         prim["q_fdr_mwu_primary65"] < alpha
     )
     return int(sig.sum()), len(prim)
+
+
+def structure_nhpt_table(
+    asociacion: pd.DataFrame, contraste: pd.DataFrame
+) -> pd.DataFrame:
+    """Asociaciones parciales con NHPT para los volúmenes de la etiqueta principal."""
+    shortlist = contraste.loc[contraste["in_shortlist_vol12"].astype(bool), "roi"]
+    rows = asociacion.loc[asociacion["feature"].isin(shortlist)].copy()
+    rows["Estructura"] = rows["feature"].map(roi_label)
+    return (
+        rows.sort_values("partial_r_fit")[
+            [
+                "Estructura",
+                "n_fit",
+                "partial_r_fit",
+                "partial_r_ci95_low_fit",
+                "partial_r_ci95_high_fit",
+                "q_fdr_fit",
+            ]
+        ]
+        .rename(
+            columns={
+                "n_fit": "n",
+                "partial_r_fit": "r parcial",
+                "partial_r_ci95_low_fit": "IC inf.",
+                "partial_r_ci95_high_fit": "IC sup.",
+                "q_fdr_fit": "q FDR",
+            }
+        )
+        .round(3)
+        .reset_index(drop=True)
+    )
+
+
+def available_scenarios(
+    reports: PopulationReports, outcome: str
+) -> dict[str, tuple[str, str]]:
+    available = set(zip(reports.etapas["escenario"], reports.etapas["desenlace"]))
+    scenarios = {
+        scenario: (target, label)
+        for scenario, (target, label) in SCENARIOS[outcome].items()
+        if (scenario, target) in available
+    }
+    if (
+        outcome == "hardware_ok"
+        and reports.icv is not None
+        and reports.icv["etiqueta"].eq("hardware_ok_icv").any()
+    ):
+        scenarios["icv"] = ("hardware_ok_icv", "Ajustada por ICV y sexo (5.6, secundario)")
+    return scenarios
 
 
 def calibration_table(calibracion: dict[str, Any]) -> pd.DataFrame:

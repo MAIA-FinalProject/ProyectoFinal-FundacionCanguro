@@ -16,3 +16,17 @@ __pycache__
 # Modelos entrenados: no van en las imágenes (se montan como volumen)
 modelos
 *.pkl
+
+# Solo entran los reportes agregados que lee el dashboard.
+reports/**
+!reports/hardware_ok/tabla1_cohortes.csv
+!reports/hardware_ok/nhpt_por_grupo.csv
+!reports/hardware_ok/contraste_80_rois_absolutas.csv
+!reports/hardware_ok/asociacion_estructura_nhpt.csv
+!reports/hardware_ok/calibracion_hardware_ok.json
+!reports/incremental/tabla_por_etapa.csv
+!reports/incremental/incrementos.csv
+!reports/incremental/curva_hardware_ok.png
+!reports/incremental/curva_nhpt.png
+!reports/incremental/icv/tabla.csv
+!reports/incremental/icv/meta.json

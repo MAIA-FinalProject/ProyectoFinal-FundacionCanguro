@@ -81,14 +81,22 @@ scp -i <llave>.pem modelos/imputer_mice.pkl modelos/baseline.pkl modelos/baselin
 
 ## 7. Levantar los contenedores (terminal de la instancia)
 
+Desde la raíz del repositorio, copia `.env.example` a `.env`. Compose usa
+`MODEL_DIR=/app/modelos` para montar en solo lectura la carpeta `modelos/` y
+`API_BASE_URL=http://api:8000` para que el dashboard consulte la API en la red
+interna. Descomenta una variable en `.env` si necesitas cambiar su valor y
+conserva el archivo en la instancia.
+
 ```
 cd ~/ProyectoFinal-FundacionCanguro
-sudo docker compose -f deploy/docker-compose.prod.yml up -d --build
-sudo docker compose -f deploy/docker-compose.prod.yml ps
+test -f .env || cp .env.example .env
+sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d --build
+sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml ps
 sudo docker images
 ```
 
-La primera construcción tarda unos minutos. Para ver los registros se usa sudo docker compose -f deploy/docker-compose.prod.yml logs -f, sin terminales interactivas que bloqueen la sesión.
+La primera construcción tarda unos minutos. Para ver los registros se usa
+`sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml logs -f`.
 
 ## 8. Prueba de extremo a extremo
 
@@ -101,7 +109,10 @@ bash deploy/smoke_test.sh http://<IP_PUBLICA>:8000
 El script consulta /health (debe devolver model_ready en true) y envía una predicción con valores sintéticos a /predict. Después, en el navegador:
 
 - http://<IP_PUBLICA>:8000/docs para la documentación de la API.
-- http://<IP_PUBLICA>:8501 para el dashboard: completar los tres campos obligatorios y pulsar Validar y generar predicción.
+- http://<IP_PUBLICA>:8501 abre Análisis poblacional. Verifica que se vean la
+  asociación estructura–NHPT y las curvas por etapa.
+- En el mismo dashboard, abre Formulario del paciente. Completa los tres campos
+  obligatorios con valores sintéticos y pulsa Validar y generar predicción.
 
 ## 9. Evidencia para el informe (ticket 3.5)
 
@@ -118,7 +129,8 @@ Junto a cada captura va una explicación breve en español.
 
 ## 10. Cierre y control de costos
 
-1. En la instancia, detener los contenedores: sudo docker compose -f deploy/docker-compose.prod.yml down.
+1. En la instancia, detener los contenedores con
+   `sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml down`.
 2. En la consola de EC2, seleccionar la instancia, Instance state, Terminate.
 3. En Canvas, cerrar la sesión del laboratorio y revisar el monto usado.
 
