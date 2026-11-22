@@ -6,9 +6,12 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      MODEL_DIR: /app/modelos
+      MODEL_DIR: ${MODEL_DIR:-/app/modelos}
     volumes:
-      - ../modelos:/app/modelos:ro
+      - type: bind
+        source: ../modelos
+        target: ${MODEL_DIR:-/app/modelos}
+        read_only: true
     healthcheck:
       test:
         - CMD
@@ -26,7 +29,8 @@ services:
       context: ..
       dockerfile: dashboard/Dockerfile
     environment:
-      API_BASE_URL: http://api:8000
+      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
+      DASHBOARD_REPORTS_DIR: ${DASHBOARD_REPORTS_DIR:-/app/reports}
     ports:
       - "127.0.0.1:8501:8501"
     depends_on:

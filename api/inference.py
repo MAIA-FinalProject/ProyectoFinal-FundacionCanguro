@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -16,11 +15,11 @@ import pandas as pd
 from pydantic import BaseModel
 
 from contracts.patient import PatientInputs
+from settings import ApiSettings
 from src.data.imputation import FORM_FEATURES, HOME_TOTAL_STD, IMPUTER_COLUMNS
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL_DIR = Path(__file__).resolve().parents[1] / "modelos"
 TARGET = "is_resilient"
 TRANSFORMED_FEATURES = (*IMPUTER_COLUMNS, HOME_TOTAL_STD)
 
@@ -50,7 +49,7 @@ class InferenceArtifacts:
 
 def model_directory() -> Path:
     """Return the model directory, which can be overridden for deployments."""
-    return Path(os.getenv("MODEL_DIR", str(DEFAULT_MODEL_DIR))).expanduser()
+    return ApiSettings().model_dir.expanduser()
 
 
 @lru_cache(maxsize=4)

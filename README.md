@@ -354,11 +354,11 @@ campos está en [`docs/inputs-paciente.md`](docs/inputs-paciente.md).
 El dashboard tiene dos páginas (ticket 5.3):
 
 - **Análisis poblacional** (página por defecto): grupos comparables, NHPT por grupo,
-  contraste de estructuras, calibración de `hardware_ok` y resultados por etapa del
-  5.2, incluido el análisis secundario ajustado por ICV del 5.6 si sus reportes existen. Lee solo los reportes agregados de `reports/hardware_ok/` y
-  `reports/incremental/`, que se versionan en Git y se copian a la imagen; la ruta se
-  puede cambiar con `DASHBOARD_REPORTS_DIR`. Si se regenera el pipeline, la página
-  muestra las cifras nuevas sin cambiar código.
+  contraste de estructuras, asociación estructura–NHPT, calibración de `hardware_ok`
+  y resultados por etapa. El selector ofrece los escenarios presentes en los
+  reportes, incluido el análisis ajustado por ICV cuando está disponible. La imagen
+  recibe solo los archivos agregados declarados en `.dockerignore`. La página vuelve
+  a leer los reportes cuando se recarga o se cambia una opción.
 - **Formulario del paciente**: demostración técnica de la API; el modelo no supera
   al azar (DEC-025, DEC-028).
 
@@ -370,7 +370,16 @@ PYTHONPATH=. uv run streamlit run dashboard/app.py
 
 Compose construye ambos servicios desde la raíz del repositorio y los conecta a
 una red interna. El dashboard consulta la API mediante `API_BASE_URL` (en Compose,
-`http://api:8000`). Los puertos del host se enlazan a `127.0.0.1`; para acceder a
+`http://api:8000`). Para ajustar la URL, `MODEL_DIR` o `DASHBOARD_REPORTS_DIR` dentro
+del contenedor, copia `.env.example` a `.env`, ajusta los valores y usa
+`docker compose --env-file .env -f deploy/docker-compose.yml up --build`.
+La ruta de reportes debe existir dentro del dashboard y es `/app/reports` por defecto.
+Si regeneras los archivos incorporados en Docker, reconstruye la imagen del dashboard.
+Al ejecutar sin Docker, la API usa la carpeta `modelos/` del repositorio y el
+dashboard consulta `http://localhost:8000` por defecto. Ambos leen el archivo
+`.env` de la raíz y dan prioridad a las variables del entorno.
+
+Los puertos del Compose local se enlazan a `127.0.0.1`. Para acceder a
 un despliegue en EC2 se debe usar un túnel SSH o configurar un proxy HTTPS con
 controles de acceso. El `.dockerignore` excluye `data/` y `.dvc/` del contexto de
 construcción para que datos clínicos y credenciales locales no entren en las
@@ -384,7 +393,8 @@ El proyecto cuenta con una GitHub Action (`.github/workflows/ci.yml`) que se eje
 1. Instala `uv` utilizando `astral-sh/setup-uv`.
 2. Sincroniza las dependencias del proyecto.
 3. Ejecuta la validación de código con `ruff check .`.
-4. Corre la suite de pruebas unitarias con `pytest tests/`.
+4. Verifica los tipos en `src/` con `mypy src/`.
+5. Corre la suite de pruebas unitarias con `pytest tests/`.
 
 ---
 

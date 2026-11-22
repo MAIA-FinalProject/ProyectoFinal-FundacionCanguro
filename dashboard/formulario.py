@@ -2,7 +2,6 @@
 
 import html
 import json
-import os
 from collections import defaultdict
 from urllib.request import urlopen
 
@@ -11,6 +10,7 @@ from pydantic import ValidationError
 
 from contracts.patient import PATIENT_INPUT_FIELDS, PatientInputField, PatientInputs
 from dashboard.api_client import PredictionApiError, request_prediction
+from settings import DashboardSettings
 
 
 def _render_field(field: PatientInputField) -> object:
@@ -85,7 +85,7 @@ def _render_fields(fields: list[PatientInputField]) -> dict[str, object]:
     return values
 
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
+API_BASE_URL = str(DashboardSettings().api_base_url).rstrip("/")
 
 st.markdown(
     """

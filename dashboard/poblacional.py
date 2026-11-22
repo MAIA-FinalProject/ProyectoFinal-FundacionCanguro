@@ -22,13 +22,8 @@ st.caption(
 )
 
 
-@st.cache_data
-def _load() -> pop.PopulationReports:
-    return pop.load_reports()
-
-
 try:
-    reports = _load()
+    reports = pop.load_reports()
 except FileNotFoundError as error:
     st.error("No se encontraron los reportes agregados.")
     st.caption(str(error))
@@ -163,6 +158,18 @@ with st.expander("Todas las métricas comparadas"):
         use_container_width=True,
     )
 
+st.subheader("Relación estructura–NHPT")
+st.dataframe(
+    pop.structure_nhpt_table(reports.asociacion, reports.contraste),
+    hide_index=True,
+    use_container_width=True,
+)
+st.caption(
+    "Correlaciones parciales ajustadas por sexo en los prematuros con RM y NHPT. "
+    "Un valor negativo indica que un mayor volumen se asocia con un menor tiempo "
+    "en el NHPT bimanual."
+)
+
 # --------------------------------------------------------------------------- #
 st.header("4. Hardware OK")
 threshold = reports.calibracion["threshold_sd_rob"]
@@ -183,35 +190,29 @@ st.caption(
 
 # --------------------------------------------------------------------------- #
 st.header("5. ¿Qué tan temprano se puede anticipar? (ticket 5.2)")
+outcome_labels = {"hardware_ok": "Hardware OK (ROC-AUC)", "nhpt": "NHPT (R²)"}
+available = {
+    target: options
+    for target in outcome_labels
+    if (options := pop.available_scenarios(reports, target))
+}
+if not available:
+    st.info("Los reportes disponibles todavía no incluyen curvas por etapa.")
+    st.stop()
 outcome = st.radio(
     "Desenlace",
-    options=["hardware_ok", "nhpt"],
-    format_func={"hardware_ok": "Hardware OK (ROC-AUC)", "nhpt": "NHPT (R²)"}.get,
+    options=list(available),
+    format_func=outcome_labels.__getitem__,
     horizontal=True,
 )
-scenarios = {
-    "hardware_ok": {
-        "principal": "Principal",
-        "etiqueta_sexo": "Etiqueta con normas por sexo",
-        "etiqueta_ref_completa": "Etiqueta con referencia completa",
-        "ipw": "Ponderado por IPW",
-        **(
-            {"icv": "Ajustada por ICV y sexo (5.6, secundario)"}
-            if reports.icv is not None
-            else {}
-        ),
-    },
-    "nhpt": {"principal": "Principal", "submuestra_rm": "Submuestra con resonancia"},
-}[outcome]
-scenario = st.selectbox("Escenario", options=list(scenarios), format_func=scenarios.get)
-target = {
-    "etiqueta_sexo": "hardware_ok_sex",
-    "etiqueta_ref_completa": "hardware_ok_ref_completa",
-    "submuestra_rm": "nhpt_mri",
-}.get(scenario, outcome)
+scenarios = available[outcome]
+scenario = st.selectbox(
+    "Escenario", options=list(scenarios), format_func=lambda option: scenarios[option][1]
+)
+target = scenarios[scenario][0]
 
 if scenario == "icv" and reports.icv is not None:
-    curve = pop.icv_curve(reports.icv)
+    curve = pop.icv_curve(reports.icv, target)
 else:
     curve = pop.stage_curve(reports.etapas, target, scenario)
 metric_title = "ROC-AUC" if outcome == "hardware_ok" else "R² fuera de muestra"

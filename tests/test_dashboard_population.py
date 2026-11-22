@@ -29,6 +29,7 @@ def test_reports_have_no_subject_level_columns(reports: pop.PopulationReports) -
         reports.tabla1,
         reports.nhpt,
         reports.contraste,
+        reports.asociacion,
         reports.etapas,
         reports.incrementos,
     ]
@@ -77,6 +78,13 @@ def test_structure_forest_has_the_12_main_volumes(
     assert len(forest) == 12
     assert forest["hedges_g"].is_monotonic_increasing
     assert (forest["hedges_g_ci95_low"] <= forest["hedges_g_ci95_high"]).all()
+
+
+def test_structure_nhpt_shows_the_12_main_volumes(reports: pop.PopulationReports) -> None:
+    table = pop.structure_nhpt_table(reports.asociacion, reports.contraste)
+    assert len(table) == 12
+    assert (table["IC inf."] <= table["r parcial"]).all()
+    assert (table["r parcial"] <= table["IC sup."]).all()
 
 
 def test_roi_labels() -> None:
@@ -189,3 +197,31 @@ def test_population_page_shows_icv_scenario() -> None:
     app.selectbox[0].set_value("icv").run()
     assert not app.exception
     assert any("Lectura prerregistrada" in m.value for m in app.markdown)
+
+
+def test_page_refreshes_reports_and_hides_absent_sensitivities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    directory = tmp_path / "reports"
+    shutil.copytree(ROOT / "reports", directory, ignore=shutil.ignore_patterns("icv"))
+    monkeypatch.setenv("DASHBOARD_REPORTS_DIR", str(directory))
+    app = AppTest.from_file(str(ROOT / "dashboard" / "app.py"), default_timeout=60)
+    app.run()
+    assert not app.exception
+    assert app.metric[0].value == "28"
+    assert "Ponderado por IPW" in app.selectbox[0].options
+
+    cohorts_path = directory / pop.HARDWARE_FILES["tabla1"]
+    cohorts = pd.read_csv(cohorts_path)
+    cohorts.loc[cohorts["variable"].eq("BIRTH_peso5"), "n_ref_mri"] = 29
+    cohorts.to_csv(cohorts_path, index=False)
+    stages_path = directory / pop.INCREMENTAL_FILES["etapas"]
+    stages = pd.read_csv(stages_path)
+    stages.loc[stages["escenario"].eq("principal")].to_csv(stages_path, index=False)
+
+    app.run()
+    assert not app.exception
+    assert app.metric[0].value == "29"
+    assert app.selectbox[0].options == ["Principal"]
