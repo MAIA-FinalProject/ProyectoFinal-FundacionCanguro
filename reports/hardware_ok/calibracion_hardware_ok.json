@@ -114,6 +114,33 @@
       "pct_qc_ok": 38.095238095238095
     },
     {
+      "criterion": "hardware_ok_icv_vol12_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 133,
+      "pct_fit_ok": 63.63636363636363,
+      "n_qc_total": 168,
+      "n_qc_ok": 112,
+      "pct_qc_ok": 66.66666666666666
+    },
+    {
+      "criterion": "hardware_ok_icv_ref_completa_vol12_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 164,
+      "pct_fit_ok": 78.4688995215311,
+      "n_qc_total": 168,
+      "n_qc_ok": 138,
+      "pct_qc_ok": 82.14285714285714
+    },
+    {
+      "criterion": "hardware_ok_icv_cst_abs_vol12_ge_m1sd",
+      "n_fit_total": 209,
+      "n_fit_ok": 132,
+      "pct_fit_ok": 63.1578947368421,
+      "n_qc_total": 168,
+      "n_qc_ok": 111,
+      "pct_qc_ok": 66.07142857142857
+    },
+    {
       "criterion": "rejected_strict_intersection_0_of_12",
       "n_fit_total": 209,
       "n_fit_ok": 20,

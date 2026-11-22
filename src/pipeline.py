@@ -9,6 +9,7 @@ Ejecuta de extremo a extremo y en orden los módulos del pipeline:
 5. ``imputacion``         -> ``src.data.imputation``           (ticket 3.1)
 6. ``ipw``                -> ``src.features.build_ipw``        (ticket 5.1)
 7. ``modelo_incremental`` -> ``src.models.train_incremental``  (ticket 5.2)
+8. ``analisis_icv``       -> ``src.models.secondary_icv``      (ticket 5.6)
 
 Cada paso se ejecuta como ``python -m <módulo>`` desde la raíz del repo, así que
 las rutas no dependen del directorio desde el que se lance el comando.
@@ -191,6 +192,32 @@ STEPS: tuple[Step, ...] = (
             "reports/incremental/meta.json",
         ),
         hint="Corre antes los pasos hardware_ok e ipw: uv run python -m src.pipeline",
+    ),
+    Step(
+        name="analisis_icv",
+        module="src.models.secondary_icv",
+        script="src/models/secondary_icv.py",
+        description=(
+            "Análisis secundario de hardware_ok ajustado por ICV, configuración del "
+            "informe (ticket 5.6, DEC-042; ~1.5 h por las permutaciones)"
+        ),
+        args=("--sensitivity", "--permutations", "500"),
+        inputs=(
+            "data/interim/canguro.parquet",
+            "data/interim/tradicional.parquet",
+            "data/interim/referencia.parquet",
+            "data/features/hardware_ok.parquet",
+            "data/features/ipw_mri.parquet",
+            # Chequeo de reproducción de DEC-038 con los mismos folds.
+            "reports/incremental/tabla_por_etapa.csv",
+        ),
+        outputs=(
+            "reports/incremental/icv/tabla.csv",
+            "reports/incremental/icv/incrementos.csv",
+            "reports/incremental/icv/meta.json",
+        ),
+        hint="Corre antes los pasos hardware_ok, ipw y modelo_incremental: "
+        "uv run python -m src.pipeline",
     ),
 )
 
