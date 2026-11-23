@@ -1,0 +1,79 @@
+{
+  "model": "logreg",
+  "target": "is_resilient",
+  "threshold": 0.0,
+  "use_home": true,
+  "n": 168,
+  "positive_rate": 0.5357142857142857,
+  "cv": {
+    "n_splits": 5,
+    "n_repeats": 10,
+    "seed": 42
+  },
+  "metrics": {
+    "roc_auc": {
+      "mean": 0.5181388888888888,
+      "std": 0.06719451017967705,
+      "p2_5": 0.40505787037037033,
+      "p97_5": 0.6488715277777778
+    },
+    "f1": {
+      "mean": 0.536223289127946,
+      "std": 0.07551991467090814,
+      "p2_5": 0.38327205882352944,
+      "p97_5": 0.6496959459459459
+    },
+    "balanced_accuracy": {
+      "mean": 0.49966666666666676,
+      "std": 0.06890911007258194,
+      "p2_5": 0.4027777777777778,
+      "p97_5": 0.6338888888888888
+    }
+  },
+  "dummy_metrics": {
+    "roc_auc": {
+      "mean": 0.5,
+      "std": 0.0,
+      "p2_5": 0.5,
+      "p97_5": 0.5
+    },
+    "f1": {
+      "mean": 0.6977375565610859,
+      "std": 0.006717714832199943,
+      "p2_5": 0.6923076923076923,
+      "p97_5": 0.7058823529411765
+    },
+    "balanced_accuracy": {
+      "mean": 0.5,
+      "std": 0.0,
+      "p2_5": 0.5,
+      "p97_5": 0.5
+    }
+  },
+  "sklearn_version": "1.9.1",
+  "target_source": "target_resilience.parquet",
+  "created_at": "2026-10-25T22:12:24+00:00",
+  "selected_C": 0.001,
+  "features": [
+    "BIRTH_ballar5",
+    "BIRTH_peso5",
+    "BIRTH_sexo5",
+    "FOLLOW_Fragility_Rasch_441_2PL",
+    "FOLLOW_Fragility_Rasch_746_2PL",
+    "HOMET_tedadcorrvisitar12m",
+    "HOMET_tsubscaleresponsivity12mraw_std",
+    "HOMET_tsubscaleaceptance12mraw_std",
+    "HOMET_tsubscaleorganization12mraw_std",
+    "HOMET_tsubscalelearningmaterial12mraw_std",
+    "HOMET_tsubscaleinvolvment12mraw_std",
+    "HOMET_tsubscalevariety12mraw_std",
+    "HOMET_tsubs112mfact",
+    "HOMET_tsubs212mfact",
+    "HOMET_tsubs312mfact",
+    "HOMET_tsubs412mfact",
+    "HOMET_tsubs512mfact",
+    "HOMET_tsubs_tothome12mfact",
+    "HOMET_ttotalsubscalehome12mraw_std"
+  ],
+  "imputer": "imputer_mice.pkl"
+}

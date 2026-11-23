@@ -1,0 +1,112 @@
+{
+  "target": "is_resilient",
+  "n": 168,
+  "positive_rate": 0.5357142857142857,
+  "chance_margin_auc": 0.08778902881480644,
+  "cv": {
+    "n_splits": 5,
+    "n_repeats": 3,
+    "seed": 42
+  },
+  "results": {
+    "enet": {
+      "roc_auc": {
+        "mean": 0.5470370370370371,
+        "std": 0.101420261629222,
+        "p2_5": 0.39045138888888886,
+        "p97_5": 0.6983101851851852
+      },
+      "f1": {
+        "mean": 0.5629312006888719,
+        "std": 0.08981354532696562,
+        "p2_5": 0.407168458781362,
+        "p97_5": 0.7275
+      },
+      "balanced_accuracy": {
+        "mean": 0.5266203703703703,
+        "std": 0.08664893277727276,
+        "p2_5": 0.4170138888888889,
+        "p97_5": 0.6869791666666667
+      }
+    }
+  },
+  "dummy": {
+    "roc_auc": {
+      "mean": 0.5,
+      "std": 0.0,
+      "p2_5": 0.5,
+      "p97_5": 0.5
+    },
+    "f1": {
+      "mean": 0.6977375565610858,
+      "std": 0.006883609314530936,
+      "p2_5": 0.6923076923076923,
+      "p97_5": 0.7058823529411765
+    },
+    "balanced_accuracy": {
+      "mean": 0.5,
+      "std": 0.0,
+      "p2_5": 0.5,
+      "p97_5": 0.5
+    }
+  },
+  "sklearn_version": "1.9.1",
+  "created_at": "2026-11-08T21:46:00+00:00",
+  "permutation_test": {
+    "model": "enet",
+    "roc_auc": 0.5306481481481481,
+    "p_value": 0.35294117647058826,
+    "n_permutations": 50
+  },
+  "export": {
+    "name": "enet",
+    "imputer": "imputer_mice.pkl",
+    "features": [
+      "BIRTH_ballar5",
+      "BIRTH_peso5",
+      "BIRTH_sexo5",
+      "FOLLOW_Fragility_Rasch_441_2PL",
+      "FOLLOW_Fragility_Rasch_746_2PL",
+      "HOMET_tedadcorrvisitar12m",
+      "HOMET_tsubscaleresponsivity12mraw_std",
+      "HOMET_tsubscaleaceptance12mraw_std",
+      "HOMET_tsubscaleorganization12mraw_std",
+      "HOMET_tsubscalelearningmaterial12mraw_std",
+      "HOMET_tsubscaleinvolvment12mraw_std",
+      "HOMET_tsubscalevariety12mraw_std",
+      "HOMET_tsubs112mfact",
+      "HOMET_tsubs212mfact",
+      "HOMET_tsubs312mfact",
+      "HOMET_tsubs412mfact",
+      "HOMET_tsubs512mfact",
+      "HOMET_tsubs_tothome12mfact",
+      "HOMET_ttotalsubscalehome12mraw_std"
+    ],
+    "selected_features": [
+      "BIRTH_ballar5",
+      "BIRTH_peso5",
+      "BIRTH_sexo5",
+      "FOLLOW_Fragility_Rasch_441_2PL",
+      "FOLLOW_Fragility_Rasch_746_2PL",
+      "HOMET_tedadcorrvisitar12m",
+      "HOMET_tsubscaleresponsivity12mraw_std",
+      "HOMET_tsubscaleaceptance12mraw_std",
+      "HOMET_tsubscaleorganization12mraw_std",
+      "HOMET_tsubscalelearningmaterial12mraw_std",
+      "HOMET_tsubscaleinvolvment12mraw_std",
+      "HOMET_tsubscalevariety12mraw_std",
+      "HOMET_tsubs112mfact",
+      "HOMET_tsubs212mfact",
+      "HOMET_tsubs312mfact",
+      "HOMET_tsubs412mfact",
+      "HOMET_tsubs512mfact",
+      "HOMET_tsubs_tothome12mfact",
+      "HOMET_ttotalsubscalehome12mraw_std"
+    ],
+    "best_params": {
+      "clf__C": 1.0,
+      "clf__l1_ratio": 0.2
+    },
+    "inner_cv_best_auc_optimistic": 0.567948717948718
+  }
+}

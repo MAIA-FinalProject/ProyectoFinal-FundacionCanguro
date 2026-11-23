@@ -90,10 +90,14 @@ data/interim/*.parquet
 data/interim/*.csv
 data/processed/*.parquet
 
-# Modelos ajustados con datos confidenciales (imputador, clasificadores): DVC, no Git.
+# Modelos ajustados con datos confidenciales (imputador, clasificadores): por defecto DVC, no Git.
+# Excepción para la entrega: se versionan los .pkl y los _meta.json de modelos/ (ver modelos/README.md).
 modelos/*
 !modelos/.gitkeep
 !modelos/*.dvc
+!modelos/*.pkl
+!modelos/*_meta.json
+!modelos/README.md
 
 # Temporary local copy of thesis/source material; never commit to Git.
 data/raw/Tesis/
